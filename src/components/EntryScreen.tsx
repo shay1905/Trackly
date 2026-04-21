@@ -174,13 +174,17 @@ export default function EntryScreen() {
   const handleCategoryMenu = useCallback((id: string) => {
     const cat = categories.find((c) => c.id === id);
     if (!cat) return;
-    const sectionCats = categories.filter((c) => c.isQuick === cat.isQuick);
+    // For income, all categories are displayed together — check first overall.
+    // For expense, sections are separate — check first within the isQuick section.
+    const sectionCats = form.type === 'expense'
+      ? categories.filter((c) => c.isQuick === cat.isQuick)
+      : categories;
     setMenuTarget({
       kind: 'category', id, icon: cat.icon, label: cat.label,
       isFirst: sectionCats[0]?.id === id,
       isQuick: cat.isQuick,
     });
-  }, [categories]);
+  }, [categories, form.type]);
 
   const handleSubcategoryMenu = useCallback((id: string) => {
     const sub = selectedCategory?.subcategories.find((s) => s.id === id);
@@ -204,11 +208,18 @@ export default function EntryScreen() {
   const handleMenuMakeDefault = useCallback(() => {
     if (!menuTarget) return;
     if (menuTarget.kind === 'category') {
-      const isQ = menuTarget.isQuick ?? true;
-      const sectionIds = categories.filter((c) => c.isQuick === isQ).map((c) => c.id);
-      const otherIds   = categories.filter((c) => c.isQuick !== isQ).map((c) => c.id);
-      const newSection = [menuTarget.id, ...sectionIds.filter((id) => id !== menuTarget.id)];
-      const newOrder   = isQ ? [...newSection, ...otherIds] : [...otherIds, ...newSection];
+      let newOrder: string[];
+      if (form.type === 'expense') {
+        // Expense has two separate sections (quick / additional) — keep them separate.
+        const isQ = menuTarget.isQuick ?? true;
+        const sectionIds = categories.filter((c) => c.isQuick === isQ).map((c) => c.id);
+        const otherIds   = categories.filter((c) => c.isQuick !== isQ).map((c) => c.id);
+        const newSection = [menuTarget.id, ...sectionIds.filter((id) => id !== menuTarget.id)];
+        newOrder = isQ ? [...newSection, ...otherIds] : [...otherIds, ...newSection];
+      } else {
+        // Income: all categories displayed together — move selected to absolute first.
+        newOrder = [menuTarget.id, ...categories.filter((c) => c.id !== menuTarget.id).map((c) => c.id)];
+      }
       reorderCategories(form.type, newOrder);
       setCategory(menuTarget.id);
     } else {

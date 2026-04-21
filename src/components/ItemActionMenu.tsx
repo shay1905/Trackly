@@ -17,7 +17,7 @@ export default function ItemActionMenu({
   onClose,
 }: Props) {
   return (
-    <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className="modal-overlay" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="context-sheet" onClick={(e) => e.stopPropagation()}>
         <div className="modal-handle" />
 
