@@ -63,11 +63,11 @@ export default function SubcategoryRow({
   const autoIcon = newLabel.trim()
     ? inferSubcategoryIcon(newLabel, parentIcon)
     : (parentIcon || '🏷️');
-  const liveIcon = customIcon ?? autoIcon;
+  const liveIcon = customIcon !== null ? customIcon : autoIcon;
 
   const handleIconChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
-    if (!val) { setCustomIcon(null); return; }
+    if (!val) { setCustomIcon(''); return; }
     setCustomIcon(extractEmoji(val) || val);
   };
 
@@ -92,6 +92,7 @@ export default function SubcategoryRow({
         inputMode="text"
         value={liveIcon}
         onChange={handleIconChange}
+        onKeyDown={(e) => { if (e.key === 'Backspace') { setCustomIcon(''); e.preventDefault(); } }}
         aria-label="אייקון"
       />
       <input

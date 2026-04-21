@@ -17,7 +17,7 @@ export default function ItemActionMenu({
   onClose,
 }: Props) {
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="context-sheet" onClick={(e) => e.stopPropagation()}>
         <div className="modal-handle" />
 
@@ -42,7 +42,7 @@ export default function ItemActionMenu({
               {moveSectionLabel}
             </button>
           )}
-          <button className="action-menu-btn danger" type="button" onClick={onDelete}>
+          <button className="action-menu-btn danger" type="button" onClick={(e) => { e.stopPropagation(); onDelete(); }}>
             מחיקה
           </button>
         </div>

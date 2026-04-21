@@ -48,6 +48,7 @@ export default function EditItemModal({ kind, icon, label, onSave, onClose }: Pr
               const val = e.target.value;
               setNewIcon(val === '' ? '' : extractEmoji(val));
             }}
+            onKeyDown={(e) => { if (e.key === 'Backspace') { setNewIcon(''); e.preventDefault(); } }}
             placeholder="🏷️"
             aria-label="אייקון"
           />
