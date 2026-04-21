@@ -232,6 +232,28 @@ export default function EntryScreen() {
     setEditMode(false);
   }, [menuTarget, moveCategorySection]);
 
+  // ── Section toggle handlers ──────────────────────────────────────
+
+  const handleToggleQuick = useCallback(() => {
+    if (!quickOpen) {
+      // Opening: if no quick category is active, select the first quick category
+      if (!selectedCategory?.isQuick && quickCats.length > 0) {
+        setCategory(quickCats[0].id);
+      }
+    }
+    setQuickOpen((v) => !v);
+  }, [quickOpen, selectedCategory, quickCats, setCategory]);
+
+  const handleToggleAdditional = useCallback(() => {
+    if (!additionalOpen) {
+      // Opening: if no additional category is active, select the first additional category
+      if (selectedCategory?.isQuick !== false && additionalCats.length > 0) {
+        setCategory(additionalCats[0].id);
+      }
+    }
+    setAdditionalOpen((v) => !v);
+  }, [additionalOpen, selectedCategory, additionalCats, setCategory]);
+
   // ── Edit / Delete confirm ────────────────────────────────────────
 
   const handleSaveEdit = useCallback((icon: string, label: string) => {
@@ -466,7 +488,7 @@ export default function EntryScreen() {
                 <>
                   <button
                     className="section-toggle"
-                    onClick={() => setQuickOpen((v) => !v)}
+                    onClick={handleToggleQuick}
                     type="button"
                   >
                     <svg className={`chevron-icon${quickOpen ? ' open' : ''}`} viewBox="0 0 12 12" fill="none">
@@ -490,8 +512,8 @@ export default function EntryScreen() {
                 </>
               )}
 
-              {/* Sub row for quick-section category */}
-              {selectedCategory && selectedCategory.isQuick && (
+              {/* Sub row for quick-section category — hidden when section is collapsed */}
+              {selectedCategory && selectedCategory.isQuick && quickOpen && (
                 <SubcategoryRow
                   subcategories={selectedCategory.subcategories}
                   selectedId={form.subcategoryId}
@@ -513,7 +535,7 @@ export default function EntryScreen() {
                 <>
                   <button
                     className="section-toggle"
-                    onClick={() => setAdditionalOpen((v) => !v)}
+                    onClick={handleToggleAdditional}
                     type="button"
                   >
                     <svg className={`chevron-icon${additionalOpen ? ' open' : ''}`} viewBox="0 0 12 12" fill="none">
@@ -526,7 +548,7 @@ export default function EntryScreen() {
                       <CategoryGrid
                         categories={additionalCats}
                         selectedId={form.categoryId}
-                        onSelect={(id) => { setCategory(id); setAdditionalOpen(false); }}
+                        onSelect={(id) => setCategory(id)}
                         type={form.type}
                         onAddCategory={() => setShowNewCategory(true)}
                         onItemMenu={handleCategoryMenu}
@@ -539,8 +561,8 @@ export default function EntryScreen() {
                 </>
               )}
 
-              {/* Sub row for additional-section category — shown below that section */}
-              {selectedCategory && !selectedCategory.isQuick && (
+              {/* Sub row for additional-section category — hidden when section is collapsed */}
+              {selectedCategory && !selectedCategory.isQuick && additionalOpen && (
                 <SubcategoryRow
                   subcategories={selectedCategory.subcategories}
                   selectedId={form.subcategoryId}
