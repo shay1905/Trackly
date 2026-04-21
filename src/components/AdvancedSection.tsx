@@ -50,7 +50,9 @@ export default function AdvancedSection({
   return (
     <div className="advanced-section">
       <button className="advanced-toggle" onClick={onToggle} type="button">
-        <span>{open ? '▲' : '▼'}</span>
+        <svg className={`chevron-icon${open ? ' open' : ''}`} viewBox="0 0 12 12" fill="none">
+          <path d="M2 4.5L6 8L10 4.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
         <span>פרטים נוספים</span>
       </button>
 

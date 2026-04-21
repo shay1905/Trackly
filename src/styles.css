@@ -351,6 +351,18 @@ input  { font-family: inherit; }
   opacity: 0.7;
 }
 
+/* empty-state add link */
+.sub-add-link-wrap { margin: 8px 20px 0; }
+.sub-add-link-btn {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-2);
+  padding: 5px 0;
+  letter-spacing: 0.1px;
+  -webkit-tap-highlight-color: transparent;
+}
+.sub-add-link-btn:active { color: var(--accent); }
+
 .sub-chip-row {
   display: flex;
   gap: 8px;
@@ -471,14 +483,18 @@ input  { font-family: inherit; }
   font-size: 20px;
   width: 38px;
   height: 38px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  text-align: center;
+  line-height: 38px;
   background: var(--surface-2);
   border-radius: var(--radius-sm);
+  border: 1.5px solid var(--border);
   flex-shrink: 0;
-  transition: all 0.2s;
+  caret-color: transparent;
+  direction: ltr;
+  padding: 0;
+  cursor: text;
 }
+.sub-add-icon-preview:focus { outline: none; border-color: var(--accent); }
 .sub-add-input {
   flex: 1;
   padding: 9px 14px;
@@ -513,7 +529,7 @@ input  { font-family: inherit; }
 .advanced-toggle {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   color: var(--text-2);
   font-size: 13px;
   font-weight: 500;
@@ -521,8 +537,8 @@ input  { font-family: inherit; }
   width: 100%;
   justify-content: flex-start;
   letter-spacing: 0.1px;
+  -webkit-tap-highlight-color: transparent;
 }
-.advanced-toggle span:first-child { font-size: 10px; }
 
 .advanced-body {
   max-height: 0;
@@ -610,18 +626,19 @@ input  { font-family: inherit; }
 .field-note-info { font-size: 11px; color: var(--accent);  margin-top: 6px; }
 .field-hint      { font-size: 11px; color: var(--text-2);  margin-top: 4px; }
 
-/* ── FAB ─────────────────────────────────────────────────────────── */
+/* ── FAB (pill) ──────────────────────────────────────────────────── */
 .fab {
   position: fixed;
-  bottom: calc(24px + var(--safe-bottom));
-  right: 24px;
-  width: 60px;
-  height: 60px;
-  border-radius: 50%;
+  bottom: calc(22px + var(--safe-bottom));
+  right: 20px;
+  height: 52px;
+  padding: 0 26px;
+  border-radius: 26px;
   background: var(--expense);
   color: #fff;
-  font-size: 28px;
-  font-weight: 300;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -629,7 +646,7 @@ input  { font-family: inherit; }
   z-index: 50;
   transition: transform 0.14s ease, background 0.14s ease, box-shadow 0.14s ease;
   -webkit-tap-highlight-color: transparent;
-  line-height: 1;
+  white-space: nowrap;
 }
 .fab.fab-income {
   background: var(--income);
@@ -638,22 +655,10 @@ input  { font-family: inherit; }
 .fab.fab-saved {
   background: #22c55e;
   box-shadow: 0 4px 14px rgba(34,197,94,0.35);
-  transform: scale(0.88);
-  font-size: 24px;
+  transform: scale(0.94);
 }
-.fab:not(.fab-saved):active { transform: scale(0.88); }
+.fab:not(.fab-saved):active { transform: scale(0.91); }
 
-/* ── Inline edit mode indicator ──────────────────────────────────── */
-.edit-mode-inline {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin: 12px 20px 0;
-  padding: 10px 14px;
-  background: var(--surface-2);
-  border-radius: var(--radius-sm);
-  border: 1.5px solid var(--border-2);
-}
 
 /* ── Errors ──────────────────────────────────────────────────────── */
 .field-error { font-size: 12px; color: var(--expense); margin-top: 5px; }
@@ -869,15 +874,21 @@ input  { font-family: inherit; }
   font-size: 26px;
   width: 44px;
   height: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  text-align: center;
+  line-height: 44px;
   background: var(--surface-2);
   border-radius: var(--radius-sm);
+  border: 1.5px solid var(--border);
   flex-shrink: 0;
-  transition: all 0.2s;
-  overflow: hidden;
+  caret-color: transparent;
+  direction: ltr;
+  padding: 0;
+  cursor: text;
 }
+.inferred-icon-preview:focus { outline: none; border-color: var(--accent); }
+
+/* Section selector chips (new category modal) */
+.section-chips { display: flex; gap: 8px; }
 .name-input-flex { flex: 1; }
 
 /* Switch */
@@ -1165,48 +1176,50 @@ input  { font-family: inherit; }
   color: var(--text-2);
 }
 
-/* ── Section labels ──────────────────────────────────────────────── */
-.cat-section-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-2);
-  letter-spacing: 0.4px;
-  text-transform: uppercase;
-  padding: 0 20px;
-  margin-bottom: -8px;
-  margin-top: 16px;
+/* ── Category area edit-mode wrapper ────────────────────────────── */
+.category-area.editing {
+  background: var(--surface-2);
+  border-radius: var(--radius-md);
+  padding-bottom: 8px;
 }
 
-/* ── Additional section toggle ───────────────────────────────────── */
-.additional-section {
-  margin: 4px 0 0;
-  position: relative;
-}
-
-/* Remove the inner CategoryGrid horizontal margin — section provides it */
-.additional-section .category-section {
-  margin-left: 20px;
-  margin-right: 20px;
-  margin-top: 4px;
-}
-
-.additional-toggle {
+/* ── Shared section toggle (שכיחים / נוספים) ─────────────────────── */
+.section-toggle {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  padding: 10px 20px;
-  font-size: 11px;
-  font-weight: 600;
+  gap: 8px;
   color: var(--text-2);
-  letter-spacing: 0.4px;
-  text-transform: uppercase;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  padding: 4px 20px;
+  width: 100%;
+  justify-content: flex-start;
+  margin-top: 12px;
   position: relative;
   z-index: 1;
   -webkit-tap-highlight-color: transparent;
 }
-.additional-toggle:active { opacity: 0.55; }
-.additional-chevron { font-size: 9px; opacity: 0.7; }
+.section-toggle:active { opacity: 0.55; }
+
+/* SVG chevron used in all three toggles */
+.chevron-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+.chevron-icon.open { transform: rotate(180deg); }
+
+/* Additional section content wrapper (CategoryGrid only, no toggle) */
+.additional-section {
+  margin: 4px 20px 0;
+}
+.additional-section .category-section {
+  margin-left: 0;
+  margin-right: 0;
+  margin-top: 0;
+}
 
 /* ── Edit icon input (direct, not overlay) ───────────────────────── */
 .edit-icon-direct {

@@ -2,6 +2,15 @@ import { useRef, useState } from 'react';
 import { Subcategory, TransactionType } from '../types';
 import { inferSubcategoryIcon } from '../utils/inferIcon';
 
+function extractEmoji(input: string): string {
+  if (!input) return '';
+  if (typeof Intl !== 'undefined' && 'Segmenter' in Intl) {
+    const segs = [...new (Intl as typeof Intl & { Segmenter: new () => { segment: (s: string) => Iterable<{ segment: string }> } }).Segmenter().segment(input)];
+    return segs[segs.length - 1]?.segment ?? input;
+  }
+  return [...input].slice(-2).join('');
+}
+
 interface Props {
   subcategories: Subcategory[];
   selectedId: string;
@@ -20,9 +29,10 @@ export default function SubcategoryRow({
   onItemMenu, onEnterEditMode, editMode,
   type, parentIcon, error,
 }: Props) {
-  const [adding,   setAdding]   = useState(false);
-  const [newLabel, setNewLabel] = useState('');
-  const [pressId,  setPressId]  = useState<string | null>(null);
+  const [adding,     setAdding]     = useState(false);
+  const [newLabel,   setNewLabel]   = useState('');
+  const [customIcon, setCustomIcon] = useState<string | null>(null);
+  const [pressId,    setPressId]    = useState<string | null>(null);
 
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const didLongPress   = useRef(false);
@@ -50,17 +60,73 @@ export default function SubcategoryRow({
     setPressId(null);
   };
 
-  const liveIcon = newLabel.trim()
+  const autoIcon = newLabel.trim()
     ? inferSubcategoryIcon(newLabel, parentIcon)
     : (parentIcon || '🏷️');
+  const liveIcon = customIcon ?? autoIcon;
+
+  const handleIconChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    if (!val) { setCustomIcon(null); return; }
+    setCustomIcon(extractEmoji(val) || val);
+  };
+
+  const resetAddForm = () => {
+    setNewLabel('');
+    setCustomIcon(null);
+    setAdding(false);
+  };
 
   const handleAdd = () => {
     const trimmed = newLabel.trim();
     if (!trimmed) return;
-    onAdd(trimmed, inferSubcategoryIcon(trimmed, parentIcon));
-    setNewLabel('');
-    setAdding(false);
+    onAdd(trimmed, liveIcon);
+    resetAddForm();
   };
+
+  const addForm = (
+    <div className="sub-add-row">
+      <input
+        className="sub-add-icon-preview"
+        type="text"
+        inputMode="text"
+        value={liveIcon}
+        onChange={handleIconChange}
+        aria-label="אייקון"
+      />
+      <input
+        autoFocus
+        className="sub-add-input"
+        placeholder="שם תת קטגוריה"
+        value={newLabel}
+        onChange={(e) => setNewLabel(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter')  handleAdd();
+          if (e.key === 'Escape') resetAddForm();
+        }}
+      />
+      <button className="sub-add-confirm" onClick={handleAdd} type="button">✓</button>
+      <button className="sub-add-cancel" onClick={resetAddForm} type="button">✕</button>
+    </div>
+  );
+
+  // Empty state: show a minimal add link instead of the full section
+  if (subcategories.length === 0 && !editMode) {
+    if (!adding) {
+      return (
+        <div className="sub-add-link-wrap">
+          <button className="sub-add-link-btn" onClick={() => setAdding(true)} type="button">
+            ＋ הוסף תת־קטגוריה
+          </button>
+        </div>
+      );
+    }
+    return (
+      <div className="sub-add-link-wrap">
+        {addForm}
+      </div>
+    );
+  }
 
   return (
     <div className="subcategory-section">
@@ -111,24 +177,7 @@ export default function SubcategoryRow({
         )}
       </div>
 
-      {adding && (
-        <div className="sub-add-row">
-          <div className="sub-add-icon-preview">{liveIcon}</div>
-          <input
-            autoFocus
-            className="sub-add-input"
-            placeholder="שם תת קטגוריה"
-            value={newLabel}
-            onChange={(e) => setNewLabel(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter')  handleAdd();
-              if (e.key === 'Escape') { setAdding(false); setNewLabel(''); }
-            }}
-          />
-          <button className="sub-add-confirm" onClick={handleAdd} type="button">✓</button>
-          <button className="sub-add-cancel" onClick={() => { setAdding(false); setNewLabel(''); }} type="button">✕</button>
-        </div>
-      )}
+      {adding && addForm}
 
       {error && <div className="field-error" style={{ marginTop: 6 }}>{error}</div>}
     </div>

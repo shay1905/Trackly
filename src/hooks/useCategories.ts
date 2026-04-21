@@ -10,6 +10,7 @@ const SUB_ORDER_KEY   = 'trackly_sub_order';
 const CAT_EDITS_KEY   = 'trackly_cat_edits';
 const SUB_EDITS_KEY   = 'trackly_sub_edits';
 const CAT_SECTION_KEY = 'trackly_cat_section';
+const SUB_DEFAULT_KEY = 'trackly_sub_default';
 
 type EditOverride = { icon: string; label: string };
 
@@ -51,6 +52,8 @@ export function useCategories() {
     loadJSON<Record<string, EditOverride>>(SUB_EDITS_KEY, {}));
   const [catSection, setCatSection] = useState<Record<string, boolean>>(() =>
     loadJSON<Record<string, boolean>>(CAT_SECTION_KEY, {}));
+  const [subDefaults, setSubDefaults] = useState<Record<string, string>>(() =>
+    loadJSON<Record<string, string>>(SUB_DEFAULT_KEY, {}));
 
   useEffect(() => { localStorage.setItem(CATS_KEY,        JSON.stringify(customCategories)); }, [customCategories]);
   useEffect(() => { localStorage.setItem(SUBS_KEY,        JSON.stringify(customSubs));       }, [customSubs]);
@@ -61,6 +64,7 @@ export function useCategories() {
   useEffect(() => { localStorage.setItem(CAT_EDITS_KEY,   JSON.stringify(catEdits));         }, [catEdits]);
   useEffect(() => { localStorage.setItem(SUB_EDITS_KEY,   JSON.stringify(subEdits));         }, [subEdits]);
   useEffect(() => { localStorage.setItem(CAT_SECTION_KEY, JSON.stringify(catSection));       }, [catSection]);
+  useEffect(() => { localStorage.setItem(SUB_DEFAULT_KEY, JSON.stringify(subDefaults));      }, [subDefaults]);
 
   const addCategory = (cat: Category) =>
     setCustomCategories((prev) => [...prev, cat]);
@@ -89,6 +93,9 @@ export function useCategories() {
   const editSubcategory = (id: string, icon: string, label: string) =>
     setSubEdits((prev) => ({ ...prev, [id]: { icon, label } }));
 
+  const setDefaultSubcategory = (categoryId: string, subId: string) =>
+    setSubDefaults((prev) => ({ ...prev, [categoryId]: subId }));
+
   const reorderCategories = (type: TransactionType, orderedIds: string[]) =>
     setCatOrder((prev) => ({ ...prev, [type]: orderedIds }));
 
@@ -107,9 +114,13 @@ export function useCategories() {
       const catEdit   = catEdits[cat.id];
       const baseMerge = catEdit ? { ...cat, icon: catEdit.icon, label: catEdit.label } : cat;
       const sectionOverride = catSection[cat.id];
-      const mergedCat = sectionOverride !== undefined
+      const withSection = sectionOverride !== undefined
         ? { ...baseMerge, isQuick: sectionOverride }
         : baseMerge;
+      const defaultSubOverride = subDefaults[cat.id];
+      const mergedCat = defaultSubOverride !== undefined
+        ? { ...withSection, defaultSubcategoryId: defaultSubOverride }
+        : withSection;
 
       const applySubEdit = (s: Subcategory) => {
         const e = subEdits[s.id];
@@ -143,6 +154,7 @@ export function useCategories() {
     archiveSubcategory,
     editCategory,
     editSubcategory,
+    setDefaultSubcategory,
     moveCategorySection,
     reorderCategories,
     reorderSubcategories,

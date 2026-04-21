@@ -2,6 +2,15 @@ import { useState, useEffect } from 'react';
 import { Category, TransactionType } from '../types';
 import { inferIcon } from '../utils/inferIcon';
 
+function extractEmoji(input: string): string {
+  if (!input) return '';
+  if (typeof Intl !== 'undefined' && 'Segmenter' in Intl) {
+    const segs = [...new (Intl as typeof Intl & { Segmenter: new () => { segment: (s: string) => Iterable<{ segment: string }> } }).Segmenter().segment(input)];
+    return segs[segs.length - 1]?.segment ?? input;
+  }
+  return [...input].slice(-2).join('');
+}
+
 interface Props {
   defaultType: TransactionType;
   onSave: (cat: Category) => void;
@@ -9,13 +18,30 @@ interface Props {
 }
 
 export default function NewCategoryModal({ defaultType, onSave, onClose }: Props) {
-  const [label,         setLabel]         = useState('');
-  const [inferredIcon,  setInferredIcon]  = useState('🏷️');
-  const [type,          setType]          = useState<TransactionType>(defaultType);
-  const [isQuick,       setIsQuick]       = useState(false);
-  const [error,         setError]         = useState('');
+  const [label,        setLabel]        = useState('');
+  const [icon,         setIcon]         = useState('🏷️');
+  const [iconUserSet,  setIconUserSet]  = useState(false);
+  const [type,         setType]         = useState<TransactionType>(defaultType);
+  const [section,      setSection]      = useState<'quick' | 'additional'>('quick');
+  const [error,        setError]        = useState('');
 
-  useEffect(() => { setInferredIcon(inferIcon(label)); }, [label]);
+  // Auto-suggest icon from label when user hasn't manually set one
+  useEffect(() => {
+    if (!iconUserSet) {
+      setIcon(inferIcon(label));
+    }
+  }, [label, iconUserSet]);
+
+  const handleIconChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    if (!val) {
+      setIconUserSet(false);
+      setIcon(inferIcon(label));
+    } else {
+      setIcon(extractEmoji(val) || val);
+      setIconUserSet(true);
+    }
+  };
 
   const handleSave = () => {
     if (!label.trim()) { setError('נדרש שם לקטגוריה'); return; }
@@ -23,8 +49,8 @@ export default function NewCategoryModal({ defaultType, onSave, onClose }: Props
     onSave({
       id: `custom-cat-${ts}`,
       label: label.trim(),
-      icon: inferredIcon,
-      isQuick,
+      icon: icon || '🏷️',
+      isQuick: type === 'income' || section === 'quick',
       subcategories: [],
       type,
     });
@@ -39,7 +65,14 @@ export default function NewCategoryModal({ defaultType, onSave, onClose }: Props
         <div className="modal-field">
           <label className="field-label">שם הקטגוריה</label>
           <div className="name-with-icon">
-            <div className="inferred-icon-preview">{inferredIcon}</div>
+            <input
+              className="inferred-icon-preview"
+              type="text"
+              inputMode="text"
+              value={icon}
+              onChange={handleIconChange}
+              aria-label="אייקון"
+            />
             <input
               className="field-input name-input-flex"
               autoFocus
@@ -48,7 +81,7 @@ export default function NewCategoryModal({ defaultType, onSave, onClose }: Props
               onChange={(e) => { setLabel(e.target.value); setError(''); }}
             />
           </div>
-          <p className="field-hint">האייקון נבחר אוטומטית לפי השם</p>
+          <p className="field-hint">האייקון נבחר אוטומטית — אפשר לשנות ידנית</p>
         </div>
 
         <div className="modal-field">
@@ -61,10 +94,19 @@ export default function NewCategoryModal({ defaultType, onSave, onClose }: Props
 
         {type === 'expense' && (
           <div className="modal-field">
-            <label className="modal-switch-row">
-              <span className="modal-switch-label">הצג בדיווחים מהירים</span>
-              <div className={`switch${isQuick ? ' on' : ''}`} onClick={() => setIsQuick((v) => !v)} />
-            </label>
+            <label className="field-label">מיקום</label>
+            <div className="section-chips">
+              <button
+                type="button"
+                className={`chip${section === 'quick' ? ' selected expense' : ''}`}
+                onClick={() => setSection('quick')}
+              >שכיחים</button>
+              <button
+                type="button"
+                className={`chip${section === 'additional' ? ' selected expense' : ''}`}
+                onClick={() => setSection('additional')}
+              >נוספים</button>
+            </div>
           </div>
         )}
 
