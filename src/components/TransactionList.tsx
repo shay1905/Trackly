@@ -1,0 +1,189 @@
+import { useState } from 'react';
+import { Transaction } from '../types';
+import ConfirmDialog from './ConfirmDialog';
+
+type DateFilter = 'until-today' | 'future' | 'last-30';
+
+const FILTERS: { value: DateFilter; label: string }[] = [
+  { value: 'until-today', label: 'עד היום' },
+  { value: 'future',      label: 'עתידיות' },
+  { value: 'last-30',     label: '30 ימים אחרונים' },
+];
+
+const RECURRENCE_LABELS: Record<string, string> = {
+  'one-time': '', monthly: 'חודשי', weekly: 'שבועי', yearly: 'שנתי',
+};
+
+function todayStr() {
+  return new Date().toISOString().split('T')[0];
+}
+function daysAgoStr(n: number) {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return d.toISOString().split('T')[0];
+}
+
+function formatDate(dateStr: string): string {
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('he-IL', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function groupByDate(transactions: Transaction[]): [string, Transaction[]][] {
+  const map = new Map<string, Transaction[]>();
+  for (const t of transactions) {
+    const existing = map.get(t.date);
+    if (existing) existing.push(t);
+    else map.set(t.date, [t]);
+  }
+  return Array.from(map.entries());
+}
+
+interface PendingDelete {
+  kind: 'single' | 'group';
+  id: string;
+}
+
+interface Props {
+  transactions: Transaction[];
+  onDelete: (id: string) => void;
+  onDeleteGroup: (groupId: string) => void;
+}
+
+export default function TransactionList({ transactions, onDelete, onDeleteGroup }: Props) {
+  const [filter,        setFilter]        = useState<DateFilter>('until-today');
+  const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
+
+  const today     = todayStr();
+  const thirtyAgo = daysAgoStr(30);
+
+  const filtered = transactions.filter((t) => {
+    switch (filter) {
+      case 'until-today': return t.date <= today;
+      case 'future':      return t.date > today;
+      case 'last-30':     return t.date >= thirtyAgo && t.date <= today;
+    }
+  });
+
+  const groups = groupByDate(filtered);
+
+  const confirmDelete = () => {
+    if (!pendingDelete) return;
+    if (pendingDelete.kind === 'single') onDelete(pendingDelete.id);
+    else onDeleteGroup(pendingDelete.id);
+    setPendingDelete(null);
+  };
+
+  return (
+    <div className="history-container">
+      <div className="history-filter-row">
+        {FILTERS.map((f) => (
+          <button
+            key={f.value}
+            className={`history-filter-btn${filter === f.value ? ' active' : ''}`}
+            onClick={() => setFilter(f.value)}
+            type="button"
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      {filtered.length === 0 ? (
+        <div className="history-empty">
+          <div className="history-empty-icon">📭</div>
+          <p>אין עסקאות בתצוגה זו</p>
+        </div>
+      ) : (
+        <div className="history-list">
+          {groups.map(([date, items]) => (
+            <div key={date} className="history-group">
+              <div className="history-date-label">{formatDate(date)}</div>
+              {items.map((t) => {
+                const recLabel      = RECURRENCE_LABELS[t.recurrence];
+                const isInstallment = t.installmentTotal && t.installmentTotal > 1;
+                const isRecurring   = t.recurrenceTotal  && t.recurrenceTotal  > 1;
+                const groupId       = t.installmentGroupId ?? t.recurrenceGroupId;
+
+                return (
+                  <div key={t.id} className={`tx-item ${t.type}`}>
+                    <div className="tx-icon-wrap">
+                      <span className="tx-icon">{t.categoryIcon}</span>
+                    </div>
+                    <div className="tx-info">
+                      <div className="tx-category">
+                        {t.categoryLabel}
+                        {t.subcategoryLabel && (
+                          <span className="tx-sub"> · {t.subcategoryLabel}</span>
+                        )}
+                      </div>
+                      <div className="tx-badges">
+                        {isInstallment && (
+                          <span className="tx-badge installment-badge">
+                            {t.installmentIndex}/{t.installmentTotal}
+                          </span>
+                        )}
+                        {isRecurring && recLabel && (
+                          <span className="tx-badge recurrence-badge">
+                            {recLabel} {t.recurrenceIndex}/{t.recurrenceTotal}
+                          </span>
+                        )}
+                        {!isInstallment && !isRecurring && recLabel && (
+                          <span className="tx-badge">{recLabel}</span>
+                        )}
+                      </div>
+                      {t.description && <div className="tx-desc">{t.description}</div>}
+                    </div>
+                    <div className="tx-right">
+                      <div className={`tx-amount ${t.type}`}>
+                        {t.type === 'income' ? '+' : '−'}
+                        {t.amount.toLocaleString('he-IL')} ₪
+                      </div>
+                      <div className="tx-actions">
+                        {groupId && (
+                          <button
+                            className="tx-delete-group"
+                            onClick={() => setPendingDelete({ kind: 'group', id: groupId })}
+                          >מחק סדרה</button>
+                        )}
+                        <button
+                          className="tx-delete"
+                          onClick={() => setPendingDelete({ kind: 'single', id: t.id })}
+                        >✕</button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Single transaction confirm */}
+      {pendingDelete?.kind === 'single' && (
+        <ConfirmDialog
+          title="מחיקת דיווח"
+          message="האם למחוק את הדיווח?"
+          confirmLabel="מחק"
+          cancelLabel="ביטול"
+          danger
+          onConfirm={confirmDelete}
+          onCancel={() => setPendingDelete(null)}
+        />
+      )}
+
+      {/* Series confirm */}
+      {pendingDelete?.kind === 'group' && (
+        <ConfirmDialog
+          title="מחיקת סדרה"
+          message={'האם למחוק את כל הסדרה?\nפעולה זו תמחק את כל המופעים של החיוב.'}
+          confirmLabel="מחק סדרה"
+          cancelLabel="ביטול"
+          danger
+          onConfirm={confirmDelete}
+          onCancel={() => setPendingDelete(null)}
+        />
+      )}
+    </div>
+  );
+}
