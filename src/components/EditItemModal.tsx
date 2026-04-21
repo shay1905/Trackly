@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 
 interface Props {
   kind: 'category' | 'subcategory';
@@ -20,13 +20,11 @@ function extractEmoji(input: string): string {
 export default function EditItemModal({ kind, icon, label, onSave, onClose }: Props) {
   const [newIcon,  setNewIcon]  = useState(icon);
   const [newLabel, setNewLabel] = useState(label);
-  const labelRef = useRef<HTMLInputElement>(null);
 
   const handleSave = () => {
     const trimmedLabel = newLabel.trim();
     if (!trimmedLabel) return;
-    const finalIcon = newIcon.trim() || icon;
-    onSave(finalIcon, trimmedLabel);
+    onSave(newIcon || icon, trimmedLabel);
   };
 
   return (
@@ -42,12 +40,15 @@ export default function EditItemModal({ kind, icon, label, onSave, onClose }: Pr
         <div className="edit-field-row">
           <span className="edit-field-label">אייקון</span>
           <input
-            className="edit-icon-input"
+            className="edit-icon-direct"
             type="text"
             inputMode="text"
             value={newIcon}
-            onChange={(e) => setNewIcon(extractEmoji(e.target.value))}
-            placeholder={icon}
+            onChange={(e) => {
+              const val = e.target.value;
+              setNewIcon(val === '' ? '' : extractEmoji(val));
+            }}
+            placeholder="🏷️"
             aria-label="אייקון"
           />
           <span className="edit-icon-hint">טאפ ← בחר אמוג׳י</span>
@@ -57,7 +58,6 @@ export default function EditItemModal({ kind, icon, label, onSave, onClose }: Pr
         <div className="edit-field-row">
           <span className="edit-field-label">שם</span>
           <input
-            ref={labelRef}
             className="edit-name-input"
             type="text"
             value={newLabel}

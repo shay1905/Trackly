@@ -9,15 +9,15 @@ interface Props {
   onAddCategory: () => void;
   onItemMenu: (id: string) => void;
   onEnterEditMode: () => void;
-  onExitEditMode: () => void;
   editMode: boolean;
+  showAddButton?: boolean;
   error?: string;
 }
 
 export default function CategoryGrid({
   categories, selectedId, onSelect, type,
   onAddCategory, onItemMenu,
-  onEnterEditMode, onExitEditMode, editMode, error,
+  onEnterEditMode, editMode, showAddButton, error,
 }: Props) {
   const [pressId,     setPressId]     = useState<string | null>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -50,10 +50,7 @@ export default function CategoryGrid({
     <div className="category-section">
       <div className={`category-grid${error ? ' has-error' : ''}${editMode ? ' editing' : ''}`}>
         {categories.map((cat) => (
-          <div
-            key={cat.id}
-            className="cat-cell"
-          >
+          <div key={cat.id} className="cat-cell">
             <button
               className={[
                 'category-btn',
@@ -90,20 +87,13 @@ export default function CategoryGrid({
 
       {error && <div className="field-error">{error}</div>}
 
-      <div className="cat-add-row">
-        {editMode ? (
-          <div className="edit-mode-footer">
-            <span className="edit-mode-indicator">מצב עריכה</span>
-            <button className="edit-done-btn" onClick={onExitEditMode} type="button">
-              סיום
-            </button>
-          </div>
-        ) : (
+      {showAddButton && !editMode && (
+        <div className="cat-add-row">
           <button className="cat-add-link" onClick={onAddCategory} type="button">
             ＋ קטגוריה חדשה
           </button>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -64,6 +64,7 @@ export default function SubcategoryRow({
 
   return (
     <div className="subcategory-section">
+      <div className="sub-section-label">תתי קטגוריות</div>
       <div className={`sub-chip-row${editMode ? ' editing' : ''}`}>
         {subcategories.map((sub) => (
           <div

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   TransactionForm, TransactionType, RecurrenceType, Transaction, Category,
 } from '../types';
@@ -54,7 +54,12 @@ type View = 'entry' | 'history';
 
 interface DeleteTarget { kind: 'category' | 'subcategory'; id: string; }
 interface EditTarget   { kind: 'category' | 'subcategory'; id: string; icon: string; label: string; }
-interface MenuTarget   { kind: 'category' | 'subcategory'; id: string; icon: string; label: string; isFirst: boolean; }
+interface MenuTarget   {
+  kind: 'category' | 'subcategory';
+  id: string; icon: string; label: string;
+  isFirst: boolean;
+  isQuick?: boolean;
+}
 
 export default function EntryScreen() {
   const [view,            setView]            = useState<View>('entry');
@@ -64,6 +69,7 @@ export default function EntryScreen() {
   const [saved,           setSaved]           = useState(false);
   const [showNewCategory, setShowNewCategory] = useState(false);
   const [editMode,        setEditMode]        = useState(false);
+  const [additionalOpen,  setAdditionalOpen]  = useState(false);
   const [deleteTarget,    setDeleteTarget]    = useState<DeleteTarget | null>(null);
   const [editTarget,      setEditTarget]      = useState<EditTarget   | null>(null);
   const [menuTarget,      setMenuTarget]      = useState<MenuTarget   | null>(null);
@@ -73,6 +79,7 @@ export default function EntryScreen() {
     addCategory, archiveCategory,
     addSubcategory, archiveSubcategory,
     editCategory, editSubcategory,
+    moveCategorySection,
     reorderCategories, reorderSubcategories,
     getCategoriesForType, mergeSubcategories,
   } = useCategories();
@@ -80,7 +87,18 @@ export default function EntryScreen() {
   const builtinCats = getBuiltinCategoriesForType(form.type);
   const userCats    = getCategoriesForType(form.type);
   const categories  = mergeSubcategories([...builtinCats, ...userCats], form.type);
+
+  const quickCats      = form.type === 'expense' ? categories.filter((c) => c.isQuick)  : categories;
+  const additionalCats = form.type === 'expense' ? categories.filter((c) => !c.isQuick) : [];
+
   const selectedCategory = categories.find((c) => c.id === form.categoryId) ?? null;
+
+  // Auto-open additional section if selected category is there
+  useEffect(() => {
+    if (form.type === 'expense' && selectedCategory && !selectedCategory.isQuick) {
+      setAdditionalOpen(true);
+    }
+  }, [form.categoryId, form.type, selectedCategory]);
 
   const setType = useCallback((type: TransactionType) => {
     const builtins   = getBuiltinCategoriesForType(type);
@@ -96,6 +114,7 @@ export default function EntryScreen() {
     }));
     setErrors({});
     setEditMode(false);
+    setAdditionalOpen(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -123,6 +142,7 @@ export default function EntryScreen() {
       categoryId: cat.id,
       subcategoryId: cat.defaultSubcategoryId ?? '',
     }));
+    if (cat.type === 'expense' && !cat.isQuick) setAdditionalOpen(true);
     setShowNewCategory(false);
   }, [addCategory]);
 
@@ -131,7 +151,12 @@ export default function EntryScreen() {
   const handleCategoryMenu = useCallback((id: string) => {
     const cat = categories.find((c) => c.id === id);
     if (!cat) return;
-    setMenuTarget({ kind: 'category', id, icon: cat.icon, label: cat.label, isFirst: categories[0]?.id === id });
+    const sectionCats = categories.filter((c) => c.isQuick === cat.isQuick);
+    setMenuTarget({
+      kind: 'category', id, icon: cat.icon, label: cat.label,
+      isFirst: sectionCats[0]?.id === id,
+      isQuick: cat.isQuick,
+    });
   }, [categories]);
 
   const handleSubcategoryMenu = useCallback((id: string) => {
@@ -156,7 +181,11 @@ export default function EntryScreen() {
   const handleMenuMakeDefault = useCallback(() => {
     if (!menuTarget) return;
     if (menuTarget.kind === 'category') {
-      const newOrder = [menuTarget.id, ...categories.filter((c) => c.id !== menuTarget.id).map((c) => c.id)];
+      const isQ = menuTarget.isQuick ?? true;
+      const sectionIds = categories.filter((c) => c.isQuick === isQ).map((c) => c.id);
+      const otherIds   = categories.filter((c) => c.isQuick !== isQ).map((c) => c.id);
+      const newSection = [menuTarget.id, ...sectionIds.filter((id) => id !== menuTarget.id)];
+      const newOrder   = isQ ? [...newSection, ...otherIds] : [...otherIds, ...newSection];
       reorderCategories(form.type, newOrder);
       setCategory(menuTarget.id, form.type);
     } else {
@@ -168,6 +197,14 @@ export default function EntryScreen() {
     }
     setMenuTarget(null);
   }, [menuTarget, categories, selectedCategory, reorderCategories, reorderSubcategories, form.type, form.categoryId, setCategory]);
+
+  const handleMenuMoveSection = useCallback(() => {
+    if (!menuTarget || menuTarget.kind !== 'category') return;
+    const targetIsQuick = !menuTarget.isQuick;
+    moveCategorySection(menuTarget.id, targetIsQuick);
+    if (!targetIsQuick) setAdditionalOpen(true);
+    setMenuTarget(null);
+  }, [menuTarget, moveCategorySection]);
 
   // ── Edit / Delete confirm ────────────────────────────────────────
 
@@ -215,11 +252,6 @@ export default function EntryScreen() {
       newErrors.amount = 'נדרש סכום גדול מ-0';
     if (!form.categoryId)
       newErrors.categoryId = 'נדרש לבחור קטגוריה';
-    if (
-      selectedCategory && !selectedCategory.isQuick &&
-      selectedCategory.subcategories.length > 0 && !form.subcategoryId
-    )
-      newErrors.subcategoryId = 'נדרש לבחור תת קטגוריה';
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -278,13 +310,23 @@ export default function EntryScreen() {
     }
 
     addTransactions(newTransactions);
+
+    const keepType       = form.type;
+    const keepCategoryId = form.categoryId;
+    const keepSubId      = selectedCategory?.defaultSubcategoryId ?? '';
+
     setSaved(true);
     setTimeout(() => {
       setSaved(false);
-      setForm(defaultForm());
+      setForm({
+        ...defaultForm(),
+        type: keepType,
+        categoryId: keepCategoryId,
+        subcategoryId: keepSubId,
+      });
       setAdvancedOpen(false);
       setErrors({});
-    }, 900);
+    }, 700);
   };
 
   const amountNum = parseFloat(form.amount) || 0;
@@ -292,6 +334,11 @@ export default function EntryScreen() {
     form.type === 'expense' && form.installments > 1 && amountNum > 0
       ? (amountNum / form.installments).toLocaleString('he-IL', { maximumFractionDigits: 2 })
       : null;
+
+  // Move section label for the action menu
+  const moveSectionLabel = menuTarget?.kind === 'category' && form.type === 'expense'
+    ? (menuTarget.isQuick ? 'העבר לקטגוריות נוספות' : 'העבר לדיווחים מהירים')
+    : undefined;
 
   return (
     <div className="screen">
@@ -353,20 +400,80 @@ export default function EntryScreen() {
             </div>
           )}
 
-          <CategoryGrid
-            categories={categories}
-            selectedId={form.categoryId}
-            onSelect={(id) => setCategory(id, form.type)}
-            type={form.type}
-            onAddCategory={() => setShowNewCategory(true)}
-            onItemMenu={handleCategoryMenu}
-            onEnterEditMode={() => setEditMode(true)}
-            onExitEditMode={() => setEditMode(false)}
-            editMode={editMode}
-            error={errors.categoryId}
-          />
+          {/* ── Category sections ── */}
+          {form.type === 'expense' ? (
+            <>
+              {/* Quick (always visible) */}
+              {quickCats.length > 0 && (
+                <>
+                  <div className="cat-section-label">דיווחים מהירים</div>
+                  <CategoryGrid
+                  categories={quickCats}
+                  selectedId={form.categoryId}
+                  onSelect={(id) => setCategory(id, form.type)}
+                  type={form.type}
+                  onAddCategory={() => setShowNewCategory(true)}
+                  onItemMenu={handleCategoryMenu}
+                  onEnterEditMode={() => setEditMode(true)}
+                  editMode={editMode}
+                  error={errors.categoryId}
+                />
+                </>
+              )}
 
-          {selectedCategory && !selectedCategory.isQuick && selectedCategory.subcategories.length > 0 && (
+              {/* Additional (collapsible) */}
+              {additionalCats.length > 0 && (
+                <div className="additional-section">
+                  <button
+                    className="additional-toggle"
+                    onClick={() => setAdditionalOpen((v) => !v)}
+                    type="button"
+                  >
+                    <span>קטגוריות נוספות</span>
+                    <span className="additional-chevron">{additionalOpen ? '▴' : '▾'}</span>
+                  </button>
+                  {additionalOpen && (
+                    <CategoryGrid
+                      categories={additionalCats}
+                      selectedId={form.categoryId}
+                      onSelect={(id) => setCategory(id, form.type)}
+                      type={form.type}
+                      onAddCategory={() => setShowNewCategory(true)}
+                      onItemMenu={handleCategoryMenu}
+                      onEnterEditMode={() => setEditMode(true)}
+                      editMode={editMode}
+                      showAddButton
+                    />
+                  )}
+                </div>
+              )}
+
+              {/* Show add button when no additional cats exist or additional is closed */}
+              {additionalCats.length === 0 && !editMode && (
+                <div className="cat-add-row" style={{ margin: '10px 20px 0' }}>
+                  <button className="cat-add-link" onClick={() => setShowNewCategory(true)} type="button">
+                    ＋ קטגוריה חדשה
+                  </button>
+                </div>
+              )}
+            </>
+          ) : (
+            <CategoryGrid
+              categories={quickCats}
+              selectedId={form.categoryId}
+              onSelect={(id) => setCategory(id, form.type)}
+              type={form.type}
+              onAddCategory={() => setShowNewCategory(true)}
+              onItemMenu={handleCategoryMenu}
+              onEnterEditMode={() => setEditMode(true)}
+              editMode={editMode}
+              showAddButton
+              error={errors.categoryId}
+            />
+          )}
+
+          {/* ── Subcategory row (always shown when category selected) ── */}
+          {selectedCategory && (
             <SubcategoryRow
               subcategories={selectedCategory.subcategories}
               selectedId={form.subcategoryId}
@@ -380,7 +487,6 @@ export default function EntryScreen() {
               editMode={editMode}
               type={form.type}
               parentIcon={selectedCategory.icon}
-              error={errors.subcategoryId}
             />
           )}
 
@@ -404,20 +510,27 @@ export default function EntryScreen() {
             type={form.type}
           />
 
-          {editMode ? (
-            <div className="save-btn edit-mode-save-placeholder">
-              מצב עריכה פעיל
+          {editMode && (
+            <div className="edit-mode-inline">
+              <span className="edit-mode-label">מצב עריכה</span>
+              <button className="edit-done-btn" type="button" onClick={() => setEditMode(false)}>
+                סיום
+              </button>
             </div>
-          ) : (
-            <button
-              className={`save-btn${saved ? ' saved' : ''}${form.type === 'income' ? ' income' : ''}`}
-              onClick={handleSave}
-              disabled={saved}
-            >
-              {saved ? '✓ נשמר!' : 'שמור'}
-            </button>
           )}
         </>
+      )}
+
+      {/* FAB — only in entry view, hidden in edit mode */}
+      {view === 'entry' && !editMode && (
+        <button
+          className={`fab${saved ? ' fab-saved' : ''}${form.type === 'income' ? ' fab-income' : ''}`}
+          onClick={handleSave}
+          disabled={saved}
+          aria-label="הוסף עסקה"
+        >
+          {saved ? '✓' : '＋'}
+        </button>
       )}
 
       {showNewCategory && (
@@ -458,6 +571,8 @@ export default function EntryScreen() {
           onEdit={handleMenuEdit}
           onDelete={handleMenuDelete}
           onMakeDefault={handleMenuMakeDefault}
+          onMoveSection={moveSectionLabel ? handleMenuMoveSection : undefined}
+          moveSectionLabel={moveSectionLabel}
           onClose={() => setMenuTarget(null)}
         />
       )}

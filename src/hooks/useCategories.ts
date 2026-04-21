@@ -1,14 +1,15 @@
 import { useState, useEffect } from 'react';
 import { Category, Subcategory, TransactionType } from '../types';
 
-const CATS_KEY      = 'trackly_custom_categories';
-const SUBS_KEY      = 'trackly_custom_subs';
-const ARC_CATS_KEY  = 'trackly_archived_cat_ids';
-const ARC_SUBS_KEY  = 'trackly_archived_sub_ids';
-const CAT_ORDER_KEY = 'trackly_cat_order';
-const SUB_ORDER_KEY = 'trackly_sub_order';
-const CAT_EDITS_KEY = 'trackly_cat_edits';
-const SUB_EDITS_KEY = 'trackly_sub_edits';
+const CATS_KEY        = 'trackly_custom_categories';
+const SUBS_KEY        = 'trackly_custom_subs';
+const ARC_CATS_KEY    = 'trackly_archived_cat_ids';
+const ARC_SUBS_KEY    = 'trackly_archived_sub_ids';
+const CAT_ORDER_KEY   = 'trackly_cat_order';
+const SUB_ORDER_KEY   = 'trackly_sub_order';
+const CAT_EDITS_KEY   = 'trackly_cat_edits';
+const SUB_EDITS_KEY   = 'trackly_sub_edits';
+const CAT_SECTION_KEY = 'trackly_cat_section';
 
 type EditOverride = { icon: string; label: string };
 
@@ -48,15 +49,18 @@ export function useCategories() {
     loadJSON<Record<string, EditOverride>>(CAT_EDITS_KEY, {}));
   const [subEdits, setSubEdits] = useState<Record<string, EditOverride>>(() =>
     loadJSON<Record<string, EditOverride>>(SUB_EDITS_KEY, {}));
+  const [catSection, setCatSection] = useState<Record<string, boolean>>(() =>
+    loadJSON<Record<string, boolean>>(CAT_SECTION_KEY, {}));
 
-  useEffect(() => { localStorage.setItem(CATS_KEY,      JSON.stringify(customCategories)); }, [customCategories]);
-  useEffect(() => { localStorage.setItem(SUBS_KEY,      JSON.stringify(customSubs));       }, [customSubs]);
-  useEffect(() => { localStorage.setItem(ARC_CATS_KEY,  JSON.stringify(archivedCatIds));   }, [archivedCatIds]);
-  useEffect(() => { localStorage.setItem(ARC_SUBS_KEY,  JSON.stringify(archivedSubIds));   }, [archivedSubIds]);
-  useEffect(() => { localStorage.setItem(CAT_ORDER_KEY, JSON.stringify(catOrder));         }, [catOrder]);
-  useEffect(() => { localStorage.setItem(SUB_ORDER_KEY, JSON.stringify(subOrder));         }, [subOrder]);
-  useEffect(() => { localStorage.setItem(CAT_EDITS_KEY, JSON.stringify(catEdits));         }, [catEdits]);
-  useEffect(() => { localStorage.setItem(SUB_EDITS_KEY, JSON.stringify(subEdits));         }, [subEdits]);
+  useEffect(() => { localStorage.setItem(CATS_KEY,        JSON.stringify(customCategories)); }, [customCategories]);
+  useEffect(() => { localStorage.setItem(SUBS_KEY,        JSON.stringify(customSubs));       }, [customSubs]);
+  useEffect(() => { localStorage.setItem(ARC_CATS_KEY,    JSON.stringify(archivedCatIds));   }, [archivedCatIds]);
+  useEffect(() => { localStorage.setItem(ARC_SUBS_KEY,    JSON.stringify(archivedSubIds));   }, [archivedSubIds]);
+  useEffect(() => { localStorage.setItem(CAT_ORDER_KEY,   JSON.stringify(catOrder));         }, [catOrder]);
+  useEffect(() => { localStorage.setItem(SUB_ORDER_KEY,   JSON.stringify(subOrder));         }, [subOrder]);
+  useEffect(() => { localStorage.setItem(CAT_EDITS_KEY,   JSON.stringify(catEdits));         }, [catEdits]);
+  useEffect(() => { localStorage.setItem(SUB_EDITS_KEY,   JSON.stringify(subEdits));         }, [subEdits]);
+  useEffect(() => { localStorage.setItem(CAT_SECTION_KEY, JSON.stringify(catSection));       }, [catSection]);
 
   const addCategory = (cat: Category) =>
     setCustomCategories((prev) => [...prev, cat]);
@@ -79,6 +83,9 @@ export function useCategories() {
   const editCategory = (id: string, icon: string, label: string) =>
     setCatEdits((prev) => ({ ...prev, [id]: { icon, label } }));
 
+  const moveCategorySection = (id: string, isQuick: boolean) =>
+    setCatSection((prev) => ({ ...prev, [id]: isQuick }));
+
   const editSubcategory = (id: string, icon: string, label: string) =>
     setSubEdits((prev) => ({ ...prev, [id]: { icon, label } }));
 
@@ -98,7 +105,11 @@ export function useCategories() {
 
     const withSubs = filtered.map((cat) => {
       const catEdit   = catEdits[cat.id];
-      const mergedCat = catEdit ? { ...cat, icon: catEdit.icon, label: catEdit.label } : cat;
+      const baseMerge = catEdit ? { ...cat, icon: catEdit.icon, label: catEdit.label } : cat;
+      const sectionOverride = catSection[cat.id];
+      const mergedCat = sectionOverride !== undefined
+        ? { ...baseMerge, isQuick: sectionOverride }
+        : baseMerge;
 
       const applySubEdit = (s: Subcategory) => {
         const e = subEdits[s.id];
@@ -132,6 +143,7 @@ export function useCategories() {
     archiveSubcategory,
     editCategory,
     editSubcategory,
+    moveCategorySection,
     reorderCategories,
     reorderSubcategories,
     getCategoriesForType,

@@ -30,9 +30,9 @@
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 
   /* icon canvas sizes */
-  --icon-lg: 40px;
-  --icon-md: 30px;
-  --icon-sm: 24px;
+  --icon-lg: 50px;
+  --icon-md: 38px;
+  --icon-sm: 26px;
 }
 
 html { direction: rtl; -webkit-text-size-adjust: 100%; }
@@ -54,7 +54,7 @@ input  { font-family: inherit; }
   max-width: 480px;
   margin: 0 auto;
   min-height: 100dvh;
-  padding-bottom: calc(100px + var(--safe-bottom));
+  padding-bottom: calc(88px + var(--safe-bottom));
   display: flex;
   flex-direction: column;
 }
@@ -226,7 +226,7 @@ input  { font-family: inherit; }
 .cat-icon-wrap {
   width: var(--icon-lg);
   height: var(--icon-lg);
-  border-radius: 12px;
+  border-radius: 14px;
   background: var(--surface-2);
   display: flex;
   align-items: center;
@@ -236,7 +236,7 @@ input  { font-family: inherit; }
   flex-shrink: 0;
 }
 .cat-icon {
-  font-size: 20px;
+  font-size: 24px;
   line-height: 1;
   display: block;
   text-align: center;
@@ -339,7 +339,17 @@ input  { font-family: inherit; }
 .edit-done-btn:active { opacity: 0.7; }
 
 /* ── Subcategory cards ───────────────────────────────────────────── */
-.subcategory-section { margin: 12px 20px 0; }
+.subcategory-section { margin: 10px 20px 0; }
+
+.sub-section-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-2);
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  margin-bottom: 7px;
+  opacity: 0.7;
+}
 
 .sub-chip-row {
   display: flex;
@@ -387,7 +397,7 @@ input  { font-family: inherit; }
   transition: background 0.15s;
 }
 .sub-chip-icon {
-  font-size: 16px;
+  font-size: 20px;
   line-height: 1;
   display: block;
   text-align: center;
@@ -600,35 +610,50 @@ input  { font-family: inherit; }
 .field-note-info { font-size: 11px; color: var(--accent);  margin-top: 6px; }
 .field-hint      { font-size: 11px; color: var(--text-2);  margin-top: 4px; }
 
-/* ── Save button ─────────────────────────────────────────────────── */
-.save-btn {
+/* ── FAB ─────────────────────────────────────────────────────────── */
+.fab {
   position: fixed;
-  bottom: calc(20px + var(--safe-bottom));
-  left: 50%;
-  transform: translateX(-50%);
-  width: calc(100% - 40px);
-  max-width: 440px;
-  padding: 17px;
-  border-radius: var(--radius-lg);
+  bottom: calc(24px + var(--safe-bottom));
+  right: 24px;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
   background: var(--expense);
   color: #fff;
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: 0.3px;
-  box-shadow: 0 6px 24px rgba(232,71,106,0.30), 0 2px 8px rgba(232,71,106,0.15);
-  transition: all 0.18s ease;
-  font-family: inherit;
+  font-size: 28px;
+  font-weight: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 18px rgba(232,71,106,0.40), 0 2px 6px rgba(232,71,106,0.20);
+  z-index: 50;
+  transition: transform 0.14s ease, background 0.14s ease, box-shadow 0.14s ease;
+  -webkit-tap-highlight-color: transparent;
+  line-height: 1;
 }
-.save-btn.income {
+.fab.fab-income {
   background: var(--income);
-  box-shadow: 0 6px 24px rgba(29,164,114,0.30), 0 2px 8px rgba(29,164,114,0.15);
+  box-shadow: 0 4px 18px rgba(29,164,114,0.40), 0 2px 6px rgba(29,164,114,0.20);
 }
-.save-btn.saved {
-  background: #2ecc71;
-  box-shadow: 0 4px 16px rgba(46,204,113,0.30);
-  transform: translateX(-50%) scale(0.97);
+.fab.fab-saved {
+  background: #22c55e;
+  box-shadow: 0 4px 14px rgba(34,197,94,0.35);
+  transform: scale(0.88);
+  font-size: 24px;
 }
-.save-btn:not(.saved):active { transform: translateX(-50%) scale(0.96); }
+.fab:not(.fab-saved):active { transform: scale(0.88); }
+
+/* ── Inline edit mode indicator ──────────────────────────────────── */
+.edit-mode-inline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 12px 20px 0;
+  padding: 10px 14px;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  border: 1.5px solid var(--border-2);
+}
 
 /* ── Errors ──────────────────────────────────────────────────────── */
 .field-error { font-size: 12px; color: var(--expense); margin-top: 5px; }
@@ -1064,23 +1089,6 @@ input  { font-family: inherit; }
   text-align: right;
 }
 
-/* Icon input — large single-input that acts as preview + editor */
-.edit-icon-input {
-  width: 58px;
-  height: 58px;
-  font-size: 28px;
-  text-align: center;
-  border-radius: var(--radius-sm);
-  border: 2px solid var(--border);
-  background: var(--surface-2);
-  font-family: inherit;
-  color: var(--text);
-  outline: none;
-  padding: 0;
-  cursor: pointer;
-  flex-shrink: 0;
-}
-.edit-icon-input:focus { border-color: var(--accent); }
 .edit-icon-hint {
   font-size: 11px;
   color: var(--text-2);
@@ -1151,15 +1159,75 @@ input  { font-family: inherit; }
 .category-btn.pressing  { opacity: 0.72; transform: scale(0.95); }
 .sub-chip.pressing { opacity: 0.72; transform: scale(0.93); }
 
-/* ── Edit mode save placeholder ─────────────────────────────────── */
-.save-btn.edit-mode-save-placeholder {
-  background: var(--border-2);
-  color: var(--text-2);
-  box-shadow: none;
-  cursor: default;
+.edit-mode-label {
+  font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.2px;
+  color: var(--text-2);
 }
+
+/* ── Section labels ──────────────────────────────────────────────── */
+.cat-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  padding: 0 20px;
+  margin-bottom: -8px;
+  margin-top: 16px;
+}
+
+/* ── Additional section toggle ───────────────────────────────────── */
+.additional-section {
+  margin: 4px 0 0;
+  position: relative;
+}
+
+/* Remove the inner CategoryGrid horizontal margin — section provides it */
+.additional-section .category-section {
+  margin-left: 20px;
+  margin-right: 20px;
+  margin-top: 4px;
+}
+
+.additional-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 20px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  position: relative;
+  z-index: 1;
+  -webkit-tap-highlight-color: transparent;
+}
+.additional-toggle:active { opacity: 0.55; }
+.additional-chevron { font-size: 9px; opacity: 0.7; }
+
+/* ── Edit icon input (direct, not overlay) ───────────────────────── */
+.edit-icon-direct {
+  width: 62px;
+  height: 62px;
+  font-size: 30px;
+  text-align: center;
+  border-radius: var(--radius-sm);
+  border: 2px solid var(--border);
+  background: var(--surface-2);
+  font-family: inherit;
+  outline: none;
+  padding: 0;
+  cursor: pointer;
+  flex-shrink: 0;
+  caret-color: transparent;
+  direction: ltr;
+  line-height: 62px;
+}
+.edit-icon-direct:focus { border-color: var(--accent); }
+.edit-icon-direct::placeholder { font-size: 22px; color: var(--border-2); }
 
 /* ── Scrollbar ───────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 4px; }

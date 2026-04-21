@@ -5,12 +5,16 @@ interface Props {
   onEdit: () => void;
   onDelete: () => void;
   onMakeDefault: () => void;
+  onMoveSection?: () => void;
+  moveSectionLabel?: string;
   onClose: () => void;
 }
 
 export default function ItemActionMenu({
   icon, label, isFirst,
-  onEdit, onDelete, onMakeDefault, onClose,
+  onEdit, onDelete, onMakeDefault,
+  onMoveSection, moveSectionLabel,
+  onClose,
 }: Props) {
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -31,6 +35,11 @@ export default function ItemActionMenu({
           {!isFirst && (
             <button className="action-menu-btn" type="button" onClick={onMakeDefault}>
               הגדר כברירת מחדל
+            </button>
+          )}
+          {moveSectionLabel && onMoveSection && (
+            <button className="action-menu-btn" type="button" onClick={onMoveSection}>
+              {moveSectionLabel}
             </button>
           )}
           <button className="action-menu-btn danger" type="button" onClick={onDelete}>
