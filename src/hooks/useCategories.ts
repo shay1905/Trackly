@@ -1,153 +1,174 @@
-import { useState, useEffect } from 'react';
-import { Category, Subcategory, TransactionType } from '../types';
+import { useState, useEffect, useCallback } from 'react';
+import { Category, TransactionType } from '../types';
+import { supabase } from '../lib/supabase';
 
-const CATS_KEY        = 'trackly_custom_categories';
-const SUBS_KEY        = 'trackly_custom_subs';
-const ARC_CATS_KEY    = 'trackly_archived_cat_ids';
-const ARC_SUBS_KEY    = 'trackly_archived_sub_ids';
-const CAT_ORDER_KEY   = 'trackly_cat_order';
-const SUB_ORDER_KEY   = 'trackly_sub_order';
-const CAT_EDITS_KEY   = 'trackly_cat_edits';
-const SUB_EDITS_KEY   = 'trackly_sub_edits';
-const CAT_SECTION_KEY = 'trackly_cat_section';
-const SUB_DEFAULT_KEY = 'trackly_sub_default';
-
-type EditOverride = { icon: string; label: string };
-
-function loadJSON<T>(key: string, fallback: T): T {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : fallback;
-  } catch { return fallback; }
-}
-
-function applyOrder<T extends { id: string }>(items: T[], order: string[]): T[] {
-  if (!order.length) return items;
-  return [...items].sort((a, b) => {
-    const ai = order.indexOf(a.id);
-    const bi = order.indexOf(b.id);
-    if (ai === -1 && bi === -1) return 0;
-    if (ai === -1) return 1;
-    if (bi === -1) return -1;
-    return ai - bi;
-  });
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function buildCategories(catRows: any[], subRows: any[]): Category[] {
+  return catRows
+    .filter((c) => !c.is_archived)
+    .sort((a, b) => a.sort_order - b.sort_order)
+    .map((c) => {
+      const subs = subRows
+        .filter((s) => s.category_id === c.id && !s.is_archived)
+        .sort((a, b) => a.sort_order - b.sort_order)
+        .map((s) => ({ id: s.id as string, label: s.label as string, icon: s.icon as string }));
+      const defaultSub = subRows.find(
+        (s) => s.category_id === c.id && s.is_default && !s.is_archived,
+      );
+      return {
+        id: c.id as string,
+        label: c.label as string,
+        icon: c.icon as string,
+        isQuick: c.is_quick as boolean,
+        type: c.type as 'expense' | 'income',
+        subcategories: subs,
+        defaultSubcategoryId: defaultSub?.id as string | undefined,
+      };
+    });
 }
 
 export function useCategories() {
-  const [customCategories, setCustomCategories] = useState<Category[]>(() =>
-    loadJSON<Category[]>(CATS_KEY, []));
-  const [customSubs, setCustomSubs] = useState<Record<string, Subcategory[]>>(() =>
-    loadJSON<Record<string, Subcategory[]>>(SUBS_KEY, {}));
-  const [archivedCatIds, setArchivedCatIds] = useState<string[]>(() =>
-    loadJSON<string[]>(ARC_CATS_KEY, []));
-  const [archivedSubIds, setArchivedSubIds] = useState<string[]>(() =>
-    loadJSON<string[]>(ARC_SUBS_KEY, []));
-  const [catOrder, setCatOrder] = useState<Record<string, string[]>>(() =>
-    loadJSON<Record<string, string[]>>(CAT_ORDER_KEY, {}));
-  const [subOrder, setSubOrder] = useState<Record<string, string[]>>(() =>
-    loadJSON<Record<string, string[]>>(SUB_ORDER_KEY, {}));
-  const [catEdits, setCatEdits] = useState<Record<string, EditOverride>>(() =>
-    loadJSON<Record<string, EditOverride>>(CAT_EDITS_KEY, {}));
-  const [subEdits, setSubEdits] = useState<Record<string, EditOverride>>(() =>
-    loadJSON<Record<string, EditOverride>>(SUB_EDITS_KEY, {}));
-  const [catSection, setCatSection] = useState<Record<string, boolean>>(() =>
-    loadJSON<Record<string, boolean>>(CAT_SECTION_KEY, {}));
-  const [subDefaults, setSubDefaults] = useState<Record<string, string>>(() =>
-    loadJSON<Record<string, string>>(SUB_DEFAULT_KEY, {}));
+  const [categories, setCategories] = useState<Category[]>([]);
 
-  useEffect(() => { localStorage.setItem(CATS_KEY,        JSON.stringify(customCategories)); }, [customCategories]);
-  useEffect(() => { localStorage.setItem(SUBS_KEY,        JSON.stringify(customSubs));       }, [customSubs]);
-  useEffect(() => { localStorage.setItem(ARC_CATS_KEY,    JSON.stringify(archivedCatIds));   }, [archivedCatIds]);
-  useEffect(() => { localStorage.setItem(ARC_SUBS_KEY,    JSON.stringify(archivedSubIds));   }, [archivedSubIds]);
-  useEffect(() => { localStorage.setItem(CAT_ORDER_KEY,   JSON.stringify(catOrder));         }, [catOrder]);
-  useEffect(() => { localStorage.setItem(SUB_ORDER_KEY,   JSON.stringify(subOrder));         }, [subOrder]);
-  useEffect(() => { localStorage.setItem(CAT_EDITS_KEY,   JSON.stringify(catEdits));         }, [catEdits]);
-  useEffect(() => { localStorage.setItem(SUB_EDITS_KEY,   JSON.stringify(subEdits));         }, [subEdits]);
-  useEffect(() => { localStorage.setItem(CAT_SECTION_KEY, JSON.stringify(catSection));       }, [catSection]);
-  useEffect(() => { localStorage.setItem(SUB_DEFAULT_KEY, JSON.stringify(subDefaults));      }, [subDefaults]);
+  useEffect(() => { void loadAll(); }, []);
 
-  const addCategory = (cat: Category) =>
-    setCustomCategories((prev) => [...prev, cat]);
+  async function loadAll() {
+    const [{ data: catRows, error: catErr }, { data: subRows, error: subErr }] = await Promise.all([
+      supabase.from('categories').select('*').order('sort_order'),
+      supabase.from('subcategories').select('*').order('sort_order'),
+    ]);
+    if (catErr || subErr) {
+      console.error('Failed loading categories:', catErr ?? subErr);
+      return;
+    }
+    setCategories(buildCategories(catRows ?? [], subRows ?? []));
+  }
 
-  const archiveCategory = (id: string) =>
-    setArchivedCatIds((prev) => Array.from(new Set([...prev, id])));
+  const getCategoriesForType = useCallback(
+    (type: TransactionType) => categories.filter((c) => c.type === type || c.type === 'both'),
+    [categories],
+  );
 
-  const addSubcategory = (categoryId: string, label: string, icon: string): string => {
-    const newId = `custom-sub-${Date.now()}`;
-    setCustomSubs((prev) => ({
-      ...prev,
-      [categoryId]: [...(prev[categoryId] ?? []), { id: newId, label, icon }],
+  function addCategory(cat: Category) {
+    const sameType = categories.filter((c) => c.type === cat.type);
+    void supabase.from('categories').insert({
+      id: cat.id,
+      type: cat.type,
+      label: cat.label,
+      icon: cat.icon,
+      is_quick: cat.isQuick,
+      sort_order: sameType.length + 1,
+    }).then(({ error }) => { if (error) console.error('Failed adding category:', error); });
+    setCategories((prev) => [...prev, { ...cat, subcategories: [] }]);
+  }
+
+  function archiveCategory(id: string) {
+    void supabase.from('categories').update({ is_archived: true }).eq('id', id)
+      .then(({ error }) => { if (error) console.error('Failed archiving category:', error); });
+    setCategories((prev) => prev.filter((c) => c.id !== id));
+  }
+
+  function addSubcategory(categoryId: string, label: string, icon: string): string {
+    const cat = categories.find((c) => c.id === categoryId);
+    const newId = `sub-${Date.now()}`;
+    const isFirst = (cat?.subcategories.length ?? 0) === 0;
+    void supabase.from('subcategories').insert({
+      id: newId,
+      category_id: categoryId,
+      label,
+      icon,
+      sort_order: (cat?.subcategories.length ?? 0) + 1,
+      is_default: isFirst,
+    }).then(({ error }) => { if (error) console.error('Failed adding subcategory:', error); });
+    setCategories((prev) => prev.map((c) => {
+      if (c.id !== categoryId) return c;
+      return {
+        ...c,
+        subcategories: [...c.subcategories, { id: newId, label, icon }],
+        defaultSubcategoryId: isFirst ? newId : c.defaultSubcategoryId,
+      };
     }));
     return newId;
-  };
+  }
 
-  const archiveSubcategory = (id: string) =>
-    setArchivedSubIds((prev) => Array.from(new Set([...prev, id])));
+  function archiveSubcategory(id: string) {
+    void supabase.from('subcategories').update({ is_archived: true }).eq('id', id)
+      .then(({ error }) => { if (error) console.error('Failed archiving subcategory:', error); });
+    setCategories((prev) => prev.map((c) => ({
+      ...c,
+      subcategories: c.subcategories.filter((s) => s.id !== id),
+      defaultSubcategoryId: c.defaultSubcategoryId === id
+        ? c.subcategories.find((s) => s.id !== id)?.id
+        : c.defaultSubcategoryId,
+    })));
+  }
 
-  const editCategory = (id: string, icon: string, label: string) =>
-    setCatEdits((prev) => ({ ...prev, [id]: { icon, label } }));
+  function editCategory(id: string, icon: string, label: string) {
+    void supabase.from('categories').update({ icon, label }).eq('id', id)
+      .then(({ error }) => { if (error) console.error('Failed editing category:', error); });
+    setCategories((prev) => prev.map((c) => c.id === id ? { ...c, icon, label } : c));
+  }
 
-  const moveCategorySection = (id: string, isQuick: boolean) =>
-    setCatSection((prev) => ({ ...prev, [id]: isQuick }));
+  function editSubcategory(id: string, icon: string, label: string) {
+    void supabase.from('subcategories').update({ icon, label }).eq('id', id)
+      .then(({ error }) => { if (error) console.error('Failed editing subcategory:', error); });
+    setCategories((prev) => prev.map((c) => ({
+      ...c,
+      subcategories: c.subcategories.map((s) => s.id === id ? { ...s, icon, label } : s),
+    })));
+  }
 
-  const editSubcategory = (id: string, icon: string, label: string) =>
-    setSubEdits((prev) => ({ ...prev, [id]: { icon, label } }));
+  function setDefaultSubcategory(categoryId: string, subId: string) {
+    void supabase.from('subcategories').update({ is_default: false }).eq('category_id', categoryId)
+      .then(() => supabase.from('subcategories').update({ is_default: true }).eq('id', subId))
+      .then(({ error }) => { if (error) console.error('Failed setting default subcategory:', error); });
+    setCategories((prev) => prev.map((c) =>
+      c.id === categoryId ? { ...c, defaultSubcategoryId: subId } : c));
+  }
 
-  const setDefaultSubcategory = (categoryId: string, subId: string) =>
-    setSubDefaults((prev) => ({ ...prev, [categoryId]: subId }));
+  function moveCategorySection(id: string, isQuick: boolean) {
+    void supabase.from('categories').update({ is_quick: isQuick }).eq('id', id)
+      .then(({ error }) => { if (error) console.error('Failed moving category section:', error); });
+    setCategories((prev) => prev.map((c) => c.id === id ? { ...c, isQuick } : c));
+  }
 
-  const reorderCategories = (type: TransactionType, orderedIds: string[]) =>
-    setCatOrder((prev) => ({ ...prev, [type]: orderedIds }));
-
-  const reorderSubcategories = (categoryId: string, orderedIds: string[]) =>
-    setSubOrder((prev) => ({ ...prev, [categoryId]: orderedIds }));
-
-  const getCategoriesForType = (type: TransactionType) =>
-    customCategories.filter(
-      (c) => (c.type === type || c.type === 'both') && !archivedCatIds.includes(c.id)
-    );
-
-  const mergeSubcategories = (cats: Category[], type?: TransactionType): Category[] => {
-    const filtered = cats.filter((cat) => !archivedCatIds.includes(cat.id));
-
-    const withSubs = filtered.map((cat) => {
-      const catEdit   = catEdits[cat.id];
-      const baseMerge = catEdit ? { ...cat, icon: catEdit.icon, label: catEdit.label } : cat;
-      const sectionOverride = catSection[cat.id];
-      const withSection = sectionOverride !== undefined
-        ? { ...baseMerge, isQuick: sectionOverride }
-        : baseMerge;
-      const defaultSubOverride = subDefaults[cat.id];
-      const mergedCat = defaultSubOverride !== undefined
-        ? { ...withSection, defaultSubcategoryId: defaultSubOverride }
-        : withSection;
-
-      const applySubEdit = (s: Subcategory) => {
-        const e = subEdits[s.id];
-        return e ? { ...s, icon: e.icon, label: e.label } : s;
-      };
-
-      const baseSubs  = cat.subcategories
-        .filter((s) => !archivedSubIds.includes(s.id))
-        .map(applySubEdit);
-      const extraSubs = (customSubs[cat.id] ?? [])
-        .filter((s) => !archivedSubIds.includes(s.id))
-        .map(applySubEdit);
-
-      const allSubs = [...baseSubs, ...extraSubs];
-      const order   = subOrder[cat.id];
-      return { ...mergedCat, subcategories: order ? applyOrder(allSubs, order) : allSubs };
+  function reorderCategories(_type: TransactionType, orderedIds: string[]) {
+    orderedIds.forEach((id, i) => {
+      void supabase.from('categories').update({ sort_order: i + 1 }).eq('id', id)
+        .then(({ error }) => { if (error) console.error('Failed reordering category:', error); });
     });
+    const idSet = new Set(orderedIds);
+    setCategories((prev) => {
+      const ordered = orderedIds.flatMap((id) => {
+        const cat = prev.find((c) => c.id === id);
+        return cat ? [cat] : [];
+      });
+      const rest = prev.filter((c) => !idSet.has(c.id));
+      return [...ordered, ...rest];
+    });
+  }
 
-    if (type) {
-      const order = catOrder[type];
-      return order ? applyOrder(withSubs, order) : withSubs;
-    }
-    return withSubs;
-  };
+  function reorderSubcategories(categoryId: string, orderedIds: string[]) {
+    orderedIds.forEach((id, i) => {
+      void supabase.from('subcategories').update({ sort_order: i + 1 }).eq('id', id)
+        .then(({ error }) => { if (error) console.error('Failed reordering subcategory:', error); });
+    });
+    setCategories((prev) => prev.map((c) => {
+      if (c.id !== categoryId) return c;
+      const byId = new Map(c.subcategories.map((s) => [s.id, s]));
+      return {
+        ...c,
+        subcategories: orderedIds.flatMap((id) => {
+          const s = byId.get(id);
+          return s ? [s] : [];
+        }),
+      };
+    }));
+  }
 
   return {
-    customCategories,
+    categories,
+    getCategoriesForType,
     addCategory,
     archiveCategory,
     addSubcategory,
@@ -158,7 +179,5 @@ export function useCategories() {
     moveCategorySection,
     reorderCategories,
     reorderSubcategories,
-    getCategoriesForType,
-    mergeSubcategories,
   };
 }

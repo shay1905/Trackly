@@ -2,11 +2,6 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   TransactionForm, TransactionType, RecurrenceType, Transaction, Category,
 } from '../types';
-import {
-  getCategoriesForType as getBuiltinCategoriesForType,
-  EXPENSE_CATEGORIES,
-  INCOME_CATEGORIES,
-} from '../data/categories';
 import { useTransactions } from '../hooks/useTransactions';
 import { useCategories } from '../hooks/useCategories';
 import { generateRecurringDates } from '../utils/recurrence';
@@ -97,12 +92,10 @@ export default function EntryScreen() {
     setDefaultSubcategory,
     moveCategorySection,
     reorderCategories, reorderSubcategories,
-    getCategoriesForType, mergeSubcategories,
+    getCategoriesForType,
   } = useCategories();
 
-  const builtinCats = getBuiltinCategoriesForType(form.type);
-  const userCats    = getCategoriesForType(form.type);
-  const categories  = mergeSubcategories([...builtinCats, ...userCats], form.type);
+  const categories = getCategoriesForType(form.type);
 
   const quickCats      = form.type === 'expense' ? categories.filter((c) => c.isQuick)  : categories;
   const additionalCats = form.type === 'expense' ? categories.filter((c) => !c.isQuick) : [];
@@ -126,14 +119,12 @@ export default function EntryScreen() {
   }, [selectedCategory?.id, selectedCategory?.defaultSubcategoryId]);
 
   const setType = useCallback((type: TransactionType) => {
-    const builtins   = getBuiltinCategoriesForType(type);
-    const customs    = getCategoriesForType(type);
-    const merged     = mergeSubcategories([...builtins, ...customs], type);
-    const defaultCat = merged[0] ?? (type === 'expense' ? EXPENSE_CATEGORIES[0] : INCOME_CATEGORIES[0]);
+    const forType    = getCategoriesForType(type);
+    const defaultCat = forType[0];
     setForm((f) => ({
       ...f, type,
-      categoryId: defaultCat.id,
-      subcategoryId: defaultCat.defaultSubcategoryId ?? '',
+      categoryId: defaultCat?.id ?? '',
+      subcategoryId: defaultCat?.defaultSubcategoryId ?? '',
       installments: 1,
       recurrence: 'one-time',
     }));
@@ -141,8 +132,7 @@ export default function EntryScreen() {
     setEditMode(false);
     setQuickOpen(true);
     setAdditionalOpen(false);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [getCategoriesForType]);
 
   const setCategory = useCallback((categoryId: string) => {
     const cat = categories.find((c) => c.id === categoryId);
@@ -152,10 +142,8 @@ export default function EntryScreen() {
 
   const handleAddSubcategory = useCallback((label: string, icon: string) => {
     const newId = addSubcategory(form.categoryId, label, icon);
-    const isFirst = (selectedCategory?.subcategories.length ?? 0) === 0;
-    if (isFirst) setDefaultSubcategory(form.categoryId, newId);
     setForm((f) => ({ ...f, subcategoryId: newId }));
-  }, [addSubcategory, setDefaultSubcategory, form.categoryId, selectedCategory]);
+  }, [addSubcategory, form.categoryId]);
 
   const handleAddCategory = useCallback((cat: Category) => {
     addCategory(cat);
@@ -280,8 +268,8 @@ export default function EntryScreen() {
     if (deleteTarget.kind === 'category') {
       archiveCategory(deleteTarget.id);
       if (form.categoryId === deleteTarget.id) {
-        const defaultCat = form.type === 'expense' ? EXPENSE_CATEGORIES[0] : INCOME_CATEGORIES[0];
-        setForm((f) => ({ ...f, categoryId: defaultCat.id, subcategoryId: defaultCat.defaultSubcategoryId ?? '' }));
+        const fallback = getCategoriesForType(form.type).find((c) => c.id !== deleteTarget.id);
+        setForm((f) => ({ ...f, categoryId: fallback?.id ?? '', subcategoryId: fallback?.defaultSubcategoryId ?? '' }));
       }
     } else {
       const isDeletingDefault = selectedCategory?.defaultSubcategoryId === deleteTarget.id;
