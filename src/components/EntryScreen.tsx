@@ -86,6 +86,7 @@ export default function EntryScreen() {
 
   const { transactions, addTransactions, removeTransaction, removeGroup } = useTransactions();
   const {
+    loading: categoriesLoading,
     addCategory, archiveCategory,
     addSubcategory, archiveSubcategory,
     editCategory, editSubcategory,
@@ -479,7 +480,12 @@ export default function EntryScreen() {
           />
 
           {/* ── Category sections ── */}
-          <div ref={categoryAreaRef} className={`category-area${editMode ? ' editing' : ''}`}>
+          {categoriesLoading && (
+            <div className="category-area" style={{ textAlign: 'center', padding: '24px', color: '#888' }}>
+              טוען קטגוריות...
+            </div>
+          )}
+          <div ref={categoryAreaRef} className={`category-area${editMode ? ' editing' : ''}`} style={categoriesLoading ? { display: 'none' } : undefined}>
           {form.type === 'expense' ? (
             <>
               {/* Quick section — collapsible */}

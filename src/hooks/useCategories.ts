@@ -29,6 +29,7 @@ function buildCategories(catRows: any[], subRows: any[]): Category[] {
 
 export function useCategories() {
   const [categories, setCategories] = useState<Category[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => { void loadAll(); }, []);
 
@@ -39,9 +40,11 @@ export function useCategories() {
     ]);
     if (catErr || subErr) {
       console.error('Failed loading categories:', catErr ?? subErr);
+      setLoading(false);
       return;
     }
     setCategories(buildCategories(catRows ?? [], subRows ?? []));
+    setLoading(false);
   }
 
   const getCategoriesForType = useCallback(
@@ -71,20 +74,20 @@ export function useCategories() {
   function addSubcategory(categoryId: string, label: string, icon: string): string {
     const cat = categories.find((c) => c.id === categoryId);
     const newId = `sub-${Date.now()}`;
-    const isFirst = (cat?.subcategories.length ?? 0) === 0;
+    const isFirst = (cat?.subcategories?.length ?? 0) === 0;
     void supabase.from('subcategories').insert({
       id: newId,
       category_id: categoryId,
       label,
       icon,
-      sort_order: (cat?.subcategories.length ?? 0) + 1,
+      sort_order: (cat?.subcategories?.length ?? 0) + 1,
       is_default: isFirst,
     }).then(({ error }) => { if (error) console.error('Failed adding subcategory:', error); });
     setCategories((prev) => prev.map((c) => {
       if (c.id !== categoryId) return c;
       return {
         ...c,
-        subcategories: [...c.subcategories, { id: newId, label, icon }],
+        subcategories: [...(c.subcategories || []), { id: newId, label, icon }],
         defaultSubcategoryId: isFirst ? newId : c.defaultSubcategoryId,
       };
     }));
@@ -96,9 +99,9 @@ export function useCategories() {
       .then(({ error }) => { if (error) console.error('Failed archiving subcategory:', error); });
     setCategories((prev) => prev.map((c) => ({
       ...c,
-      subcategories: c.subcategories.filter((s) => s.id !== id),
+      subcategories: (c.subcategories || []).filter((s) => s.id !== id),
       defaultSubcategoryId: c.defaultSubcategoryId === id
-        ? c.subcategories.find((s) => s.id !== id)?.id
+        ? (c.subcategories || []).find((s) => s.id !== id)?.id
         : c.defaultSubcategoryId,
     })));
   }
@@ -114,7 +117,7 @@ export function useCategories() {
       .then(({ error }) => { if (error) console.error('Failed editing subcategory:', error); });
     setCategories((prev) => prev.map((c) => ({
       ...c,
-      subcategories: c.subcategories.map((s) => s.id === id ? { ...s, icon, label } : s),
+      subcategories: (c.subcategories || []).map((s) => s.id === id ? { ...s, icon, label } : s),
     })));
   }
 
@@ -155,7 +158,7 @@ export function useCategories() {
     });
     setCategories((prev) => prev.map((c) => {
       if (c.id !== categoryId) return c;
-      const byId = new Map(c.subcategories.map((s) => [s.id, s]));
+      const byId = new Map((c.subcategories || []).map((s) => [s.id, s]));
       return {
         ...c,
         subcategories: orderedIds.flatMap((id) => {
@@ -168,6 +171,7 @@ export function useCategories() {
 
   return {
     categories,
+    loading,
     getCategoriesForType,
     addCategory,
     archiveCategory,
