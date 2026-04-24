@@ -414,17 +414,15 @@ export default function EntryScreen() {
             title="הוספת עסקה"
           >✚</button>
           <button
+            className="nav-btn"
+            disabled
+            title="דשבורד (בקרוב)"
+          >📊</button>
+          <button
             className={`nav-btn${view === 'history' ? ' active' : ''}`}
             onClick={() => setView('history')}
             title="היסטוריה"
-          >
-            ☰
-            {transactions.length > 0 && view !== 'history' && (
-              <span className="nav-badge">
-                {transactions.length > 99 ? '99+' : transactions.length}
-              </span>
-            )}
-          </button>
+          >☰</button>
         </div>
       </header>
 
