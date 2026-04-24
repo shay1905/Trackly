@@ -336,13 +336,11 @@ export default function EntryScreen() {
       type: form.type,
       categoryId: form.categoryId,
       categoryLabel: selectedCategory?.label ?? '',
-      categoryIcon: selectedCategory?.icon ?? '',
       subcategoryId: form.subcategoryId,
       subcategoryLabel: subLabel,
       description: form.description,
       installments: form.installments,
       recurrence: form.recurrence,
-      createdAt: new Date().toISOString(),
       categoryNumericId: selectedCategory?.numericId,
       subcategoryNumericId: form.subcategoryId ? selectedSub?.numericId : undefined,
     };

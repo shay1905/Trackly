@@ -42,15 +42,12 @@ export interface Transaction {
   amount: number;
   categoryId: string;
   categoryLabel: string;
-  categoryIcon: string;
   subcategoryId: string;
   subcategoryLabel: string;
   description: string;
   date: string;
   installments: number;
   recurrence: RecurrenceType;
-  createdAt: string;
-  createdDate?: string;
   // installment series metadata
   installmentGroupId?: string;
   installmentIndex?: number;

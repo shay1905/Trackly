@@ -9,14 +9,12 @@ function mapRowToTransaction(row: any): Transaction {
     amount: Number(row.amount),
     categoryId: row.category_id,
     categoryLabel: row.category_label,
-    categoryIcon: row.category_icon,
     subcategoryId: row.subcategory_id ?? '',
     subcategoryLabel: row.subcategory_label ?? '',
     description: row.description ?? '',
     date: row.date,
     installments: row.installments,
     recurrence: row.recurrence,
-    createdAt: row.created_at,
     installmentGroupId: row.installment_group_id ?? undefined,
     installmentIndex: row.installment_index ?? undefined,
     installmentTotal: row.installment_total ?? undefined,
@@ -35,14 +33,12 @@ function mapTransactionToRow(t: Transaction) {
     amount: t.amount,
     category_id: t.categoryId,
     category_label: t.categoryLabel,
-    category_icon: t.categoryIcon,
     subcategory_id: t.subcategoryId || null,
     subcategory_label: t.subcategoryLabel || null,
     description: t.description,
     date: t.date,
     installments: t.installments,
     recurrence: t.recurrence,
-    created_at: t.createdAt,
     installment_group_id: t.installmentGroupId ?? null,
     installment_index: t.installmentIndex ?? null,
     installment_total: t.installmentTotal ?? null,
@@ -51,6 +47,7 @@ function mapTransactionToRow(t: Transaction) {
     recurrence_total: t.recurrenceTotal ?? null,
     category_numeric_id: t.categoryNumericId ?? null,
     subcategory_numeric_id: t.subcategoryNumericId ?? null,
+    is_deleted: false,
     created_date: new Date().toISOString().split('T')[0],
   };
 }
@@ -68,7 +65,7 @@ export function useTransactions() {
       .select('*')
       .eq('is_deleted', false)
       .order('date', { ascending: false })
-      .order('created_at', { ascending: false });
+      .order('created_date', { ascending: false });
 
     if (error) {
       console.error('Failed loading transactions:', error);
