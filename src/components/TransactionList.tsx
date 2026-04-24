@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Transaction } from '../types';
 import ConfirmDialog from './ConfirmDialog';
+import { useLongPress } from '../hooks/useLongPress';
 
 type DateFilter = 'until-today' | 'future' | 'last-30';
 
@@ -43,6 +44,11 @@ interface PendingDelete {
   id: string;
 }
 
+interface Popup {
+  desc: string;
+  y: number;
+}
+
 interface Props {
   transactions: Transaction[];
   onDelete: (id: string) => void;
@@ -52,17 +58,28 @@ interface Props {
 export default function TransactionList({ transactions, onDelete, onDeleteGroup }: Props) {
   const [filter,        setFilter]        = useState<DateFilter>('until-today');
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
+  const [search,        setSearch]        = useState('');
+  const [popup,         setPopup]         = useState<Popup | null>(null);
+  const pointerYRef = useRef(0);
+  const lp = useLongPress(500);
 
   const today     = todayStr();
   const thirtyAgo = daysAgoStr(30);
 
-  const filtered = transactions.filter((t) => {
-    switch (filter) {
-      case 'until-today': return t.date <= today;
-      case 'future':      return t.date > today;
-      case 'last-30':     return t.date >= thirtyAgo && t.date <= today;
-    }
-  });
+  const filtered = transactions
+    .filter((t) => {
+      switch (filter) {
+        case 'until-today': return t.date <= today;
+        case 'future':      return t.date > today;
+        case 'last-30':     return t.date >= thirtyAgo && t.date <= today;
+      }
+    })
+    .filter((t) => !search || t.description.toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) =>
+      filter === 'future'
+        ? a.date.localeCompare(b.date)
+        : b.date.localeCompare(a.date)
+    );
 
   const groups = groupByDate(filtered);
 
@@ -72,6 +89,10 @@ export default function TransactionList({ transactions, onDelete, onDeleteGroup 
     else onDeleteGroup(pendingDelete.id);
     setPendingDelete(null);
   };
+
+  const popupTop = popup
+    ? Math.max(60, Math.min(popup.y - 30, window.innerHeight - 100))
+    : 0;
 
   return (
     <div className="history-container">
@@ -86,6 +107,19 @@ export default function TransactionList({ transactions, onDelete, onDeleteGroup 
             {f.label}
           </button>
         ))}
+      </div>
+
+      <div className="history-search-wrap">
+        <input
+          className="history-search"
+          type="text"
+          placeholder="חיפוש לפי תיאור..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        {search && (
+          <button className="history-search-clear" onClick={() => setSearch('')} type="button">✕</button>
+        )}
       </div>
 
       {filtered.length === 0 ? (
@@ -105,7 +139,20 @@ export default function TransactionList({ transactions, onDelete, onDeleteGroup 
                 const groupId       = t.installmentGroupId ?? t.recurrenceGroupId;
 
                 return (
-                  <div key={t.id} className={`tx-item ${t.type}`}>
+                  <div
+                    key={t.id}
+                    className={`tx-item ${t.type}${lp.pressingId === t.id ? ' tx-pressing' : ''}`}
+                    onPointerDown={(e) => {
+                      if ((e.target as HTMLElement).closest('button')) return;
+                      if (!t.description) return;
+                      pointerYRef.current = e.clientY;
+                      lp.start(t.id, () => setPopup({ desc: t.description, y: pointerYRef.current }));
+                    }}
+                    onPointerUp={() => lp.cancel()}
+                    onPointerCancel={() => lp.cancel()}
+                    onPointerLeave={() => lp.cancel()}
+                    onContextMenu={(e) => { if (t.description) e.preventDefault(); }}
+                  >
                     <div className="tx-icon-wrap">
                       <span className="tx-icon">{t.categoryIcon}</span>
                     </div>
@@ -159,7 +206,14 @@ export default function TransactionList({ transactions, onDelete, onDeleteGroup 
         </div>
       )}
 
-      {/* Single transaction confirm */}
+      {popup && (
+        <div className="desc-popup-overlay" onClick={() => setPopup(null)}>
+          <div className="desc-popup" style={{ top: popupTop }}>
+            {popup.desc}
+          </div>
+        </div>
+      )}
+
       {pendingDelete?.kind === 'single' && (
         <ConfirmDialog
           title="מחיקת דיווח"
@@ -172,7 +226,6 @@ export default function TransactionList({ transactions, onDelete, onDeleteGroup 
         />
       )}
 
-      {/* Series confirm */}
       {pendingDelete?.kind === 'group' && (
         <ConfirmDialog
           title="מחיקת סדרה"
