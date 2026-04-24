@@ -7,9 +7,7 @@ function mapRowToTransaction(row: any): Transaction {
     id: row.id,
     type: row.type,
     amount: Number(row.amount),
-    categoryId: row.category_id ?? undefined,
     categoryLabel: row.category_label,
-    subcategoryId: row.subcategory_id ?? undefined,
     subcategoryLabel: row.subcategory_label ?? '',
     description: row.description ?? '',
     date: row.date,
@@ -21,8 +19,8 @@ function mapRowToTransaction(row: any): Transaction {
     recurrenceGroupId: row.recurrence_group_id ?? undefined,
     recurrenceIndex: row.recurrence_index ?? undefined,
     recurrenceTotal: row.recurrence_total ?? undefined,
-    categoryNumericId: row.category_numeric_id ?? null,
-    subcategoryNumericId: row.subcategory_numeric_id ?? null,
+    categoryNumericId: row.category_id ?? null,
+    subcategoryNumericId: row.subcategory_id ?? null,
   };
 }
 
@@ -31,9 +29,9 @@ function mapTransactionToRow(t: Transaction) {
     id: t.id,
     type: t.type,
     amount: t.amount,
-    category_id: t.categoryId ?? null,
+    category_id: t.categoryNumericId ?? null,
     category_label: t.categoryLabel,
-    subcategory_id: t.subcategoryId ?? null,
+    subcategory_id: t.subcategoryNumericId ?? null,
     subcategory_label: t.subcategoryLabel || null,
     description: t.description,
     date: t.date,
@@ -45,8 +43,6 @@ function mapTransactionToRow(t: Transaction) {
     recurrence_group_id: t.recurrenceGroupId ?? null,
     recurrence_index: t.recurrenceIndex ?? null,
     recurrence_total: t.recurrenceTotal ?? null,
-    category_numeric_id: t.categoryNumericId ?? null,
-    subcategory_numeric_id: t.subcategoryNumericId ?? null,
     is_deleted: false,
     created_date: new Date().toISOString().split('T')[0],
   };
