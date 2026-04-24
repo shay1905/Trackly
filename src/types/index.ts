@@ -48,6 +48,7 @@ export interface Transaction {
   installments: number;
   recurrence: RecurrenceType;
   createdAt: string;
+  createdDate?: string;
   // installment series metadata
   installmentGroupId?: string;
   installmentIndex?: number;

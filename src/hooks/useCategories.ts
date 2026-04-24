@@ -35,8 +35,8 @@ export function useCategories() {
 
   async function loadAll() {
     const [{ data: catRows, error: catErr }, { data: subRows, error: subErr }] = await Promise.all([
-      supabase.from('categories').select('*').order('sort_order'),
-      supabase.from('subcategories').select('*').order('sort_order'),
+      supabase.from('categories').select('*').eq('is_deleted', false).order('sort_order'),
+      supabase.from('subcategories').select('*').eq('is_deleted', false).order('sort_order'),
     ]);
     if (catErr || subErr) {
       console.error('Failed loading categories:', catErr ?? subErr);
@@ -66,7 +66,7 @@ export function useCategories() {
   }
 
   function archiveCategory(id: string) {
-    void supabase.from('categories').update({ is_archived: true }).eq('id', id)
+    void supabase.from('categories').update({ is_archived: true, is_deleted: true }).eq('id', id)
       .then(({ error }) => { if (error) console.error('Failed archiving category:', error); });
     setCategories((prev) => prev.filter((c) => c.id !== id));
   }
@@ -95,7 +95,7 @@ export function useCategories() {
   }
 
   function archiveSubcategory(id: string) {
-    void supabase.from('subcategories').update({ is_archived: true }).eq('id', id)
+    void supabase.from('subcategories').update({ is_archived: true, is_deleted: true }).eq('id', id)
       .then(({ error }) => { if (error) console.error('Failed archiving subcategory:', error); });
     setCategories((prev) => prev.map((c) => ({
       ...c,

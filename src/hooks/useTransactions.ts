@@ -47,6 +47,7 @@ function mapTransactionToRow(t: Transaction) {
     recurrence_group_id: t.recurrenceGroupId ?? null,
     recurrence_index: t.recurrenceIndex ?? null,
     recurrence_total: t.recurrenceTotal ?? null,
+    created_date: new Date().toISOString().split('T')[0],
   };
 }
 
@@ -61,6 +62,7 @@ export function useTransactions() {
     const { data, error } = await supabase
       .from('transactions')
       .select('*')
+      .eq('is_deleted', false)
       .order('date', { ascending: false })
       .order('created_at', { ascending: false });
 
@@ -90,7 +92,7 @@ export function useTransactions() {
   async function removeTransaction(id: string) {
     const { error } = await supabase
       .from('transactions')
-      .delete()
+      .update({ is_deleted: true })
       .eq('id', id);
 
     if (error) {
@@ -114,7 +116,7 @@ export function useTransactions() {
 
     const { error } = await supabase
       .from('transactions')
-      .delete()
+      .update({ is_deleted: true })
       .in('id', ids);
 
     if (error) {

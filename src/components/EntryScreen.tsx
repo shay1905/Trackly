@@ -429,6 +429,7 @@ export default function EntryScreen() {
       {view === 'history' ? (
         <TransactionList
           transactions={transactions}
+          categories={categories}
           onDelete={removeTransaction}
           onDeleteGroup={removeGroup}
         />

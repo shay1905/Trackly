@@ -1,7 +1,16 @@
 import { useRef, useState } from 'react';
-import { Transaction } from '../types';
+import { Category, Transaction } from '../types';
 import ConfirmDialog from './ConfirmDialog';
 import { useLongPress } from '../hooks/useLongPress';
+
+function getDisplayIcon(t: Transaction, categories: Category[]): string {
+  if (t.subcategoryId) {
+    const cat = categories.find((c) => c.id === t.categoryId);
+    const sub = cat?.subcategories.find((s) => s.id === t.subcategoryId);
+    if (sub?.icon) return sub.icon;
+  }
+  return t.categoryIcon;
+}
 
 type DateFilter = 'until-today' | 'future' | 'last-30';
 
@@ -51,11 +60,12 @@ interface Popup {
 
 interface Props {
   transactions: Transaction[];
+  categories: Category[];
   onDelete: (id: string) => void;
   onDeleteGroup: (groupId: string) => void;
 }
 
-export default function TransactionList({ transactions, onDelete, onDeleteGroup }: Props) {
+export default function TransactionList({ transactions, categories, onDelete, onDeleteGroup }: Props) {
   const [filter,        setFilter]        = useState<DateFilter>('until-today');
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
   const [search,        setSearch]        = useState('');
@@ -154,7 +164,7 @@ export default function TransactionList({ transactions, onDelete, onDeleteGroup 
                     onContextMenu={(e) => { if (t.description) e.preventDefault(); }}
                   >
                     <div className="tx-icon-wrap">
-                      <span className="tx-icon">{t.categoryIcon}</span>
+                      <span className="tx-icon">{getDisplayIcon(t, categories)}</span>
                     </div>
                     <div className="tx-info">
                       <div className="tx-category">
