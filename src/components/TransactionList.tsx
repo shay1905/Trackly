@@ -4,12 +4,13 @@ import ConfirmDialog from './ConfirmDialog';
 import { useLongPress } from '../hooks/useLongPress';
 
 function getDisplayIcon(t: Transaction, categories: Category[]): string {
-  if (t.subcategoryId) {
-    const cat = categories.find((c) => c.id === t.categoryId);
-    const sub = cat?.subcategories.find((s) => s.id === t.subcategoryId);
+  const cat = categories.find((c) => c.id === t.categoryId);
+  if (t.subcategoryId && cat) {
+    const sub = cat.subcategories.find((s) => s.id === t.subcategoryId);
     if (sub?.icon) return sub.icon;
   }
-  return t.categoryIcon;
+  if (cat?.icon) return cat.icon;
+  return '🏷️';
 }
 
 type DateFilter = 'until-today' | 'future' | 'last-30';

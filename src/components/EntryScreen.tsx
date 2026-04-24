@@ -90,6 +90,7 @@ export default function EntryScreen() {
 
   const { transactions, addTransactions, removeTransaction, removeGroup } = useTransactions();
   const {
+    categories: allCategories,
     loading: categoriesLoading,
     addCategory, archiveCategory,
     addSubcategory, archiveSubcategory,
@@ -429,7 +430,7 @@ export default function EntryScreen() {
       {view === 'history' ? (
         <TransactionList
           transactions={transactions}
-          categories={categories}
+          categories={allCategories}
           onDelete={removeTransaction}
           onDeleteGroup={removeGroup}
         />
