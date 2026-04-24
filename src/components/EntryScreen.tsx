@@ -336,13 +336,13 @@ export default function EntryScreen() {
       type: form.type,
       categoryId: form.categoryId,
       categoryLabel: selectedCategory?.label ?? '',
-      subcategoryId: form.subcategoryId,
+      subcategoryId: form.subcategoryId || undefined,
       subcategoryLabel: subLabel,
       description: form.description,
       installments: form.installments,
       recurrence: form.recurrence,
-      categoryNumericId: selectedCategory?.numericId,
-      subcategoryNumericId: form.subcategoryId ? selectedSub?.numericId : undefined,
+      categoryNumericId: selectedCategory?.numericId ?? null,
+      subcategoryNumericId: selectedSub?.numericId ?? null,
     };
 
     const ts = Date.now();

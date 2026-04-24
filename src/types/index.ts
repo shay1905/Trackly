@@ -40,9 +40,9 @@ export interface Transaction {
   id: string;
   type: TransactionType;
   amount: number;
-  categoryId: string;
+  categoryId?: string;
   categoryLabel: string;
-  subcategoryId: string;
+  subcategoryId?: string;
   subcategoryLabel: string;
   description: string;
   date: string;
@@ -57,6 +57,6 @@ export interface Transaction {
   recurrenceIndex?: number;
   recurrenceTotal?: number;
   // numeric FK references
-  categoryNumericId?: number;
-  subcategoryNumericId?: number;
+  categoryNumericId: number | null;
+  subcategoryNumericId: number | null;
 }
