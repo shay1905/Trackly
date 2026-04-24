@@ -27,14 +27,18 @@ const defaultForm = (): TransactionForm => ({
   installments: 1,
   recurrence: 'one-time',
   recurrenceEndMode: 'occurrences',
-  recurrenceOccurrences: 3,
+  recurrenceOccurrences: 2,
   recurrenceEndDate: '',
 });
 
 function addMonths(dateStr: string, n: number): string {
-  const d = new Date(dateStr + 'T00:00:00');
-  d.setMonth(d.getMonth() + n);
-  return d.toISOString().split('T')[0];
+  const [y, m, day] = dateStr.split('-').map(Number);
+  const totalMonths = (m - 1) + n;
+  const targetYear = y + Math.floor(totalMonths / 12);
+  const targetMonth = totalMonths % 12; // 0-indexed
+  const daysInMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
+  const finalDay = Math.min(day, daysInMonth);
+  return `${targetYear}-${String(targetMonth + 1).padStart(2, '0')}-${String(finalDay).padStart(2, '0')}`;
 }
 
 function splitInstallments(total: number, count: number): number[] {
@@ -470,12 +474,8 @@ export default function EntryScreen() {
             onInstallmentsChange={setInstallments}
             recurrence={form.recurrence}
             onRecurrenceChange={setRecurrence}
-            recurrenceEndMode={form.recurrenceEndMode}
-            onRecurrenceEndModeChange={(v) => setForm((f) => ({ ...f, recurrenceEndMode: v }))}
             recurrenceOccurrences={form.recurrenceOccurrences}
             onRecurrenceOccurrencesChange={(v) => setForm((f) => ({ ...f, recurrenceOccurrences: v }))}
-            recurrenceEndDate={form.recurrenceEndDate}
-            onRecurrenceEndDateChange={(v) => setForm((f) => ({ ...f, recurrenceEndDate: v }))}
             type={form.type}
           />
 

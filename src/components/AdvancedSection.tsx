@@ -1,14 +1,9 @@
 import { RecurrenceType, TransactionType } from '../types';
-import { countOccurrences } from '../utils/recurrence';
 
 const RECURRENCE_OPTIONS: { value: RecurrenceType; label: string }[] = [
   { value: 'one-time', label: 'חד פעמי' },
   { value: 'monthly', label: 'חודשי' },
-  { value: 'weekly', label: 'שבועי' },
-  { value: 'yearly', label: 'שנתי' },
 ];
-
-export type RecurrenceEndMode = 'occurrences' | 'end-date';
 
 interface Props {
   open: boolean;
@@ -21,12 +16,8 @@ interface Props {
   onInstallmentsChange: (v: number) => void;
   recurrence: RecurrenceType;
   onRecurrenceChange: (v: RecurrenceType) => void;
-  recurrenceEndMode: RecurrenceEndMode;
-  onRecurrenceEndModeChange: (v: RecurrenceEndMode) => void;
   recurrenceOccurrences: number;
   onRecurrenceOccurrencesChange: (v: number) => void;
-  recurrenceEndDate: string;
-  onRecurrenceEndDateChange: (v: string) => void;
   type: TransactionType;
 }
 
@@ -36,16 +27,10 @@ export default function AdvancedSection({
   date, onDateChange,
   installments, onInstallmentsChange,
   recurrence, onRecurrenceChange,
-  recurrenceEndMode, onRecurrenceEndModeChange,
   recurrenceOccurrences, onRecurrenceOccurrencesChange,
-  recurrenceEndDate, onRecurrenceEndDateChange,
   type,
 }: Props) {
   const isRecurring = recurrence !== 'one-time';
-
-  const endDateCount = recurrenceEndMode === 'end-date' && recurrenceEndDate
-    ? countOccurrences(date, recurrence, recurrenceEndDate)
-    : null;
 
   return (
     <div className="advanced-section">
@@ -71,7 +56,7 @@ export default function AdvancedSection({
 
         {/* Date */}
         <div className="field-group">
-          <label className="field-label">תאריך</label>
+          <label className="field-label">תאריך עסקה</label>
           <input
             className="field-input"
             type="date"
@@ -129,62 +114,25 @@ export default function AdvancedSection({
               </div>
             </div>
 
-            {/* Recurrence end condition — only shown when a recurring type is selected */}
+            {/* Occurrences — only shown when a recurring type is selected */}
             {isRecurring && (
               <div className="field-group recurrence-end-group">
                 <label className="field-label">סיום חיוב קבוע</label>
-
-                {/* End mode selector */}
-                <div className="recurrence-end-mode-row">
+                <div className="installments-row" style={{ marginTop: 10 }}>
                   <button
+                    className="stepper-btn"
                     type="button"
-                    className={`chip${recurrenceEndMode === 'occurrences' ? ` selected ${type}` : ''}`}
-                    onClick={() => onRecurrenceEndModeChange('occurrences')}
-                  >מספר מופעים</button>
+                    onClick={() => onRecurrenceOccurrencesChange(Math.max(2, recurrenceOccurrences - 1))}
+                    disabled={recurrenceOccurrences <= 2}
+                  >−</button>
+                  <span className="stepper-value">{recurrenceOccurrences}</span>
                   <button
+                    className="stepper-btn"
                     type="button"
-                    className={`chip${recurrenceEndMode === 'end-date' ? ` selected ${type}` : ''}`}
-                    onClick={() => onRecurrenceEndModeChange('end-date')}
-                  >תאריך סיום</button>
+                    onClick={() => onRecurrenceOccurrencesChange(recurrenceOccurrences + 1)}
+                  >+</button>
+                  <span className="recurrence-count-label">מופעים</span>
                 </div>
-
-                {/* Occurrences input */}
-                {recurrenceEndMode === 'occurrences' && (
-                  <div className="installments-row" style={{ marginTop: 10 }}>
-                    <button
-                      className="stepper-btn"
-                      type="button"
-                      onClick={() => onRecurrenceOccurrencesChange(Math.max(2, recurrenceOccurrences - 1))}
-                      disabled={recurrenceOccurrences <= 2}
-                    >−</button>
-                    <span className="stepper-value">{recurrenceOccurrences}</span>
-                    <button
-                      className="stepper-btn"
-                      type="button"
-                      onClick={() => onRecurrenceOccurrencesChange(recurrenceOccurrences + 1)}
-                    >+</button>
-                    <span className="recurrence-count-label">מופעים</span>
-                  </div>
-                )}
-
-                {/* End date input */}
-                {recurrenceEndMode === 'end-date' && (
-                  <div style={{ marginTop: 10 }}>
-                    <input
-                      className="field-input"
-                      type="date"
-                      value={recurrenceEndDate}
-                      min={date}
-                      onChange={(e) => onRecurrenceEndDateChange(e.target.value)}
-                    />
-                    {endDateCount !== null && endDateCount > 0 && (
-                      <p className="field-note-info">ייווצרו {endDateCount} עסקאות</p>
-                    )}
-                    {recurrenceEndDate && recurrenceEndDate <= date && (
-                      <p className="field-note">תאריך הסיום חייב להיות אחרי תאריך ההתחלה</p>
-                    )}
-                  </div>
-                )}
               </div>
             )}
           </>
