@@ -4,12 +4,19 @@ import ConfirmDialog from './ConfirmDialog';
 import { useLongPress } from '../hooks/useLongPress';
 
 function getDisplayIcon(t: Transaction, categories: Category[]): string {
-  const cat = categories.find((c) => c.id === t.categoryId);
-  if (t.subcategoryId && cat) {
-    const sub = cat.subcategories.find((s) => s.id === t.subcategoryId);
+  const cat = t.categoryNumericId != null
+    ? categories.find((c) => c.numericId === t.categoryNumericId)
+    : categories.find((c) => c.id === t.categoryId);
+  if (cat) {
+    const subId = t.subcategoryNumericId;
+    const sub = subId != null
+      ? cat.subcategories.find((s) => s.numericId === subId)
+      : t.subcategoryId
+        ? cat.subcategories.find((s) => s.id === t.subcategoryId)
+        : undefined;
     if (sub?.icon) return sub.icon;
+    if (cat.icon) return cat.icon;
   }
-  if (cat?.icon) return cat.icon;
   return '🏷️';
 }
 

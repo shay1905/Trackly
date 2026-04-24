@@ -23,6 +23,8 @@ function mapRowToTransaction(row: any): Transaction {
     recurrenceGroupId: row.recurrence_group_id ?? undefined,
     recurrenceIndex: row.recurrence_index ?? undefined,
     recurrenceTotal: row.recurrence_total ?? undefined,
+    categoryNumericId: row.category_numeric_id ?? undefined,
+    subcategoryNumericId: row.subcategory_numeric_id ?? undefined,
   };
 }
 
@@ -47,6 +49,8 @@ function mapTransactionToRow(t: Transaction) {
     recurrence_group_id: t.recurrenceGroupId ?? null,
     recurrence_index: t.recurrenceIndex ?? null,
     recurrence_total: t.recurrenceTotal ?? null,
+    category_numeric_id: t.categoryNumericId ?? null,
+    subcategory_numeric_id: t.subcategoryNumericId ?? null,
     created_date: new Date().toISOString().split('T')[0],
   };
 }

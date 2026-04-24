@@ -323,8 +323,9 @@ export default function EntryScreen() {
   const handleSave = () => {
     if (!validate()) return;
 
-    const total    = parseFloat(form.amount);
-    const subLabel = selectedCategory?.subcategories.find((s) => s.id === form.subcategoryId)?.label ?? '';
+    const total      = parseFloat(form.amount);
+    const selectedSub = selectedCategory?.subcategories.find((s) => s.id === form.subcategoryId);
+    const subLabel   = selectedSub?.label ?? '';
 
     type BaseFields = Omit<Transaction,
       'id' | 'amount' | 'date' |
@@ -342,6 +343,8 @@ export default function EntryScreen() {
       installments: form.installments,
       recurrence: form.recurrence,
       createdAt: new Date().toISOString(),
+      categoryNumericId: selectedCategory?.numericId,
+      subcategoryNumericId: form.subcategoryId ? selectedSub?.numericId : undefined,
     };
 
     const ts = Date.now();

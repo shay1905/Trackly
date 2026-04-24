@@ -4,12 +4,14 @@ export type RecurrenceType = 'one-time' | 'monthly' | 'weekly' | 'yearly';
 
 export interface Subcategory {
   id: string;
+  numericId?: number;
   label: string;
   icon: string;
 }
 
 export interface Category {
   id: string;
+  numericId?: number;
   label: string;
   icon: string;
   isQuick: boolean;
@@ -57,4 +59,7 @@ export interface Transaction {
   recurrenceGroupId?: string;
   recurrenceIndex?: number;
   recurrenceTotal?: number;
+  // numeric FK references
+  categoryNumericId?: number;
+  subcategoryNumericId?: number;
 }

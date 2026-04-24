@@ -11,12 +11,13 @@ function buildCategories(catRows: any[], subRows: any[]): Category[] {
       const subs = subRows
         .filter((s) => s.category_id === c.id && !s.is_archived)
         .sort((a, b) => a.sort_order - b.sort_order)
-        .map((s) => ({ id: s.id as string, label: s.label as string, icon: s.icon as string }));
+        .map((s) => ({ id: s.id as string, numericId: s.numeric_id as number | undefined, label: s.label as string, icon: s.icon as string }));
       const defaultSub = subRows.find(
         (s) => s.category_id === c.id && s.is_default && !s.is_archived,
       );
       return {
         id: c.id as string,
+        numericId: c.numeric_id as number | undefined,
         label: c.label as string,
         icon: c.icon as string,
         isQuick: c.is_quick as boolean,
