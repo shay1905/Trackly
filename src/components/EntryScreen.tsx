@@ -20,7 +20,7 @@ const today = () => new Date().toISOString().split('T')[0];
 const defaultForm = (): TransactionForm => ({
   type: 'expense',
   amount: '',
-  categoryId: 'entertainment',
+  categoryId: '',
   subcategoryId: '',
   description: '',
   date: today(),
@@ -146,17 +146,17 @@ export default function EntryScreen() {
     setErrors((e) => ({ ...e, categoryId: undefined, subcategoryId: undefined }));
   }, [categories]);
 
-  const handleAddSubcategory = useCallback((label: string, icon: string) => {
-    const newId = addSubcategory(form.categoryId, label, icon);
-    setForm((f) => ({ ...f, subcategoryId: newId }));
+  const handleAddSubcategory = useCallback(async (label: string, icon: string) => {
+    const newId = await addSubcategory(form.categoryId, label, icon);
+    if (newId) setForm((f) => ({ ...f, subcategoryId: newId }));
   }, [addSubcategory, form.categoryId]);
 
-  const handleAddCategory = useCallback((cat: Category) => {
-    addCategory(cat);
+  const handleAddCategory = useCallback(async (cat: Category) => {
+    const realId = await addCategory(cat);
     setForm((f) => ({
       ...f,
       type: cat.type as TransactionType,
-      categoryId: cat.id,
+      categoryId: realId ?? cat.id,
       subcategoryId: cat.defaultSubcategoryId ?? '',
     }));
     if (cat.type === 'expense' && !cat.isQuick) setAdditionalOpen(true);

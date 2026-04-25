@@ -11,19 +11,19 @@ function buildCategories(catRows: any[], subRows: any[]): Category[] {
       const subs = subRows
         .filter((s) => s.category_id === c.id && !s.is_archived)
         .sort((a, b) => a.sort_order - b.sort_order)
-        .map((s) => ({ id: s.id as string, numericId: s.numeric_id as number | undefined, label: s.label as string, icon: s.icon as string }));
+        .map((s) => ({ id: String(s.id), numericId: s.id as number, label: s.label as string, icon: s.icon as string }));
       const defaultSub = subRows.find(
         (s) => s.category_id === c.id && s.is_default && !s.is_archived,
       );
       return {
-        id: c.id as string,
-        numericId: c.numeric_id as number | undefined,
+        id: String(c.id),
+        numericId: c.id as number,
         label: c.label as string,
         icon: c.icon as string,
         isQuick: c.is_quick as boolean,
         type: c.type as 'expense' | 'income',
         subcategories: subs,
-        defaultSubcategoryId: defaultSub?.id as string | undefined,
+        defaultSubcategoryId: defaultSub ? String(defaultSub.id) : undefined,
       };
     });
 }
@@ -53,17 +53,19 @@ export function useCategories() {
     [categories],
   );
 
-  function addCategory(cat: Category) {
+  async function addCategory(cat: Category): Promise<string | undefined> {
     const sameType = categories.filter((c) => c.type === cat.type);
-    void supabase.from('categories').insert({
-      id: cat.id,
+    const { data, error } = await supabase.from('categories').insert({
       type: cat.type,
       label: cat.label,
       icon: cat.icon,
       is_quick: cat.isQuick,
       sort_order: sameType.length + 1,
-    }).then(({ error }) => { if (error) console.error('Failed adding category:', error); });
-    setCategories((prev) => [...prev, { ...cat, subcategories: [] }]);
+    }).select().single();
+    if (error) { console.error('Failed adding category:', error); return undefined; }
+    const realId = String(data.id);
+    setCategories((prev) => [...prev, { ...cat, id: realId, numericId: data.id as number, subcategories: [] }]);
+    return realId;
   }
 
   function archiveCategory(id: string) {
@@ -72,27 +74,27 @@ export function useCategories() {
     setCategories((prev) => prev.filter((c) => c.id !== id));
   }
 
-  function addSubcategory(categoryId: string, label: string, icon: string): string {
+  async function addSubcategory(categoryId: string, label: string, icon: string): Promise<string> {
     const cat = categories.find((c) => c.id === categoryId);
-    const newId = `sub-${Date.now()}`;
     const isFirst = (cat?.subcategories?.length ?? 0) === 0;
-    void supabase.from('subcategories').insert({
-      id: newId,
-      category_id: categoryId,
+    const { data, error } = await supabase.from('subcategories').insert({
+      category_id: cat?.numericId ?? Number(categoryId),
       label,
       icon,
       sort_order: (cat?.subcategories?.length ?? 0) + 1,
       is_default: isFirst,
-    }).then(({ error }) => { if (error) console.error('Failed adding subcategory:', error); });
+    }).select().single();
+    if (error) { console.error('Failed adding subcategory:', error); return ''; }
+    const realId = String(data.id);
     setCategories((prev) => prev.map((c) => {
       if (c.id !== categoryId) return c;
       return {
         ...c,
-        subcategories: [...(c.subcategories || []), { id: newId, label, icon }],
-        defaultSubcategoryId: isFirst ? newId : c.defaultSubcategoryId,
+        subcategories: [...(c.subcategories || []), { id: realId, numericId: data.id as number, label, icon }],
+        defaultSubcategoryId: isFirst ? realId : c.defaultSubcategoryId,
       };
     }));
-    return newId;
+    return realId;
   }
 
   function archiveSubcategory(id: string) {
