@@ -725,6 +725,55 @@ input.field-input[type="date"]::-webkit-calendar-picker-indicator {
   box-shadow: var(--shadow-sm);
 }
 
+/* Category filter chips */
+.cat-chip-row {
+  display: flex;
+  gap: 6px;
+  padding: 0 20px 10px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  direction: rtl;
+}
+.cat-chip-row::-webkit-scrollbar { display: none; }
+.cat-chip-row.sub {
+  padding-top: 0;
+  padding-bottom: 12px;
+}
+
+.cat-chip {
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1.5px solid transparent;
+  background: var(--surface);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: all 0.13s ease;
+}
+.cat-chip:hover {
+  background: var(--border);
+  color: var(--text);
+}
+.cat-chip.active {
+  background: var(--text);
+  color: var(--bg);
+  border-color: var(--text);
+}
+.cat-chip.sub {
+  font-size: 11px;
+  padding: 4px 10px;
+  opacity: 0.85;
+}
+.cat-chip.sub.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+  opacity: 1;
+}
+
 /* Search */
 .history-search-wrap {
   position: relative;

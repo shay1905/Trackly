@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useMemo } from 'react';
 import { Category, Transaction } from '../types';
 import ConfirmDialog from './ConfirmDialog';
 import { useLongPress } from '../hooks/useLongPress';
@@ -73,11 +73,41 @@ export default function TransactionList({ transactions, categories, onDelete, on
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
   const [search,        setSearch]        = useState('');
   const [popup,         setPopup]         = useState<Popup | null>(null);
+  const [selectedCatId, setSelectedCatId] = useState<number | null>(null);
+  const [selectedSubId, setSelectedSubId] = useState<number | null>(null);
   const pointerYRef = useRef(0);
   const lp = useLongPress(500);
 
   const today     = todayStr();
   const thirtyAgo = daysAgoStr(30);
+
+  const uniqueCats = useMemo(() => {
+    const seen = new Set<number>();
+    const result: { numericId: number; label: string; icon: string }[] = [];
+    for (const t of transactions) {
+      if (t.categoryNumericId != null && !seen.has(t.categoryNumericId)) {
+        seen.add(t.categoryNumericId);
+        const cat = categories.find((c) => c.numericId === t.categoryNumericId);
+        result.push({ numericId: t.categoryNumericId, label: t.categoryLabel, icon: cat?.icon ?? '🏷️' });
+      }
+    }
+    return result;
+  }, [transactions, categories]);
+
+  const uniqueSubs = useMemo(() => {
+    if (selectedCatId == null) return [];
+    const seen = new Set<number>();
+    const result: { numericId: number; label: string; icon: string }[] = [];
+    for (const t of transactions) {
+      if (t.categoryNumericId === selectedCatId && t.subcategoryNumericId != null && !seen.has(t.subcategoryNumericId)) {
+        seen.add(t.subcategoryNumericId);
+        const cat = categories.find((c) => c.numericId === t.categoryNumericId);
+        const sub = cat?.subcategories.find((s) => s.numericId === t.subcategoryNumericId);
+        result.push({ numericId: t.subcategoryNumericId, label: t.subcategoryLabel ?? '', icon: sub?.icon ?? '🏷️' });
+      }
+    }
+    return result;
+  }, [transactions, categories, selectedCatId]);
 
   const filtered = transactions
     .filter((t) => {
@@ -88,6 +118,8 @@ export default function TransactionList({ transactions, categories, onDelete, on
       }
     })
     .filter((t) => !search || t.description.toLowerCase().includes(search.toLowerCase()))
+    .filter((t) => selectedCatId == null || t.categoryNumericId === selectedCatId)
+    .filter((t) => selectedSubId == null || t.subcategoryNumericId === selectedSubId)
     .sort((a, b) =>
       filter === 'future'
         ? a.date.localeCompare(b.date)
@@ -134,6 +166,40 @@ export default function TransactionList({ transactions, categories, onDelete, on
           <button className="history-search-clear" onClick={() => setSearch('')} type="button">✕</button>
         )}
       </div>
+
+      {uniqueCats.length > 0 && (
+        <div className="cat-chip-row">
+          <button
+            className={`cat-chip${selectedCatId == null ? ' active' : ''}`}
+            onClick={() => { setSelectedCatId(null); setSelectedSubId(null); }}
+            type="button"
+          >הכל</button>
+          {uniqueCats.map((c) => (
+            <button
+              key={c.numericId}
+              className={`cat-chip${selectedCatId === c.numericId ? ' active' : ''}`}
+              onClick={() => {
+                setSelectedCatId(c.numericId);
+                setSelectedSubId(null);
+              }}
+              type="button"
+            >{c.icon} {c.label}</button>
+          ))}
+        </div>
+      )}
+
+      {uniqueSubs.length > 0 && (
+        <div className="cat-chip-row sub">
+          {uniqueSubs.map((s) => (
+            <button
+              key={s.numericId}
+              className={`cat-chip sub${selectedSubId === s.numericId ? ' active' : ''}`}
+              onClick={() => setSelectedSubId((prev) => prev === s.numericId ? null : s.numericId)}
+              type="button"
+            >{s.icon} {s.label}</button>
+          ))}
+        </div>
+      )}
 
       {filtered.length === 0 ? (
         <div className="history-empty">
