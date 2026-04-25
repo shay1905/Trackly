@@ -437,7 +437,7 @@ export default function EntryScreen() {
           onDeleteGroup={removeGroup}
         />
       ) : view === 'dashboard' ? (
-        <Dashboard transactions={transactions} />
+        <Dashboard transactions={transactions} categories={allCategories} />
       ) : (
         <>
           <div className="type-toggle">

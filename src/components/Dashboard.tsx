@@ -1,8 +1,9 @@
 import { useState, useMemo } from 'react';
-import { Transaction } from '../types';
+import { Transaction, Category } from '../types';
 
 interface Props {
   transactions: Transaction[];
+  categories: Category[];
 }
 
 type TimeFilter = '1m' | '3m' | '6m' | '12m' | 'all';
@@ -15,10 +16,32 @@ const TIME_FILTERS: { key: TimeFilter; label: string }[] = [
   { key: 'all', label: 'הכל' },
 ];
 
+const HE_MONTHS = ['ינו׳','פבר׳','מרץ','אפר׳','מאי','יוני','יולי','אוג׳','ספט׳','אוק׳','נוב׳','דצמ׳'];
+
+function currentMonthStr(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function prevMonth(ym: string): string {
+  const [y, m] = ym.split('-').map(Number);
+  return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
+}
+
+function nextMonth(ym: string): string {
+  const [y, m] = ym.split('-').map(Number);
+  return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
+}
+
+function fmtMonthHe(ym: string): string {
+  const [y, m] = ym.split('-').map(Number);
+  return `${HE_MONTHS[m - 1]} ${y}`;
+}
+
 function getStartDate(filter: TimeFilter): string | null {
   if (filter === 'all') return null;
   const now = new Date();
-  const monthsBack = filter === '1m' ? 0 : filter === '3m' ? 2 : filter === '6m' ? 5 : 11;
+  const monthsBack = filter === '3m' ? 2 : filter === '6m' ? 5 : 11;
   const d = new Date(now.getFullYear(), now.getMonth() - monthsBack, 1);
   return d.toISOString().split('T')[0];
 }
@@ -31,20 +54,239 @@ function fmtPct(n: number): string {
   return n.toFixed(1) + '%';
 }
 
-function fmtMonth(m: string): string {
-  const [y, mo] = m.split('-');
-  return `${mo}/${y}`;
+const NAV_BTN: React.CSSProperties = {
+  background: 'none', border: 'none', cursor: 'pointer',
+  fontSize: '20px', color: '#6b7280', padding: '0 6px', lineHeight: 1,
+};
+
+// ── Shared data type + builder ───────────────────────────────────────────
+type CatRow = {
+  label: string;
+  icon: string;
+  avg: number;
+  pct: number;
+  subcats: { label: string; icon: string; avg: number; pct: number }[];
+};
+
+function buildCatRows(
+  txList: Transaction[],
+  type: 'income' | 'expense',
+  total: number,
+  monthCount: number,
+  categories: Category[],
+): CatRow[] {
+  const catMap    = new Map<string, number>();
+  const subcatMap = new Map<string, Map<string, number>>();
+  txList.filter((t) => t.type === type).forEach((t) => {
+    catMap.set(t.categoryLabel, (catMap.get(t.categoryLabel) ?? 0) + t.amount);
+    if (t.subcategoryLabel) {
+      if (!subcatMap.has(t.categoryLabel)) subcatMap.set(t.categoryLabel, new Map());
+      const sm = subcatMap.get(t.categoryLabel)!;
+      sm.set(t.subcategoryLabel, (sm.get(t.subcategoryLabel) ?? 0) + t.amount);
+    }
+  });
+  return Array.from(catMap.entries())
+    .map(([label, catTotal]) => {
+      const catObj  = categories.find((c) => c.label === label);
+      const catIcon = catObj?.icon ?? '';
+      return {
+        label, icon: catIcon,
+        avg: catTotal / monthCount,
+        pct: total > 0 ? (catTotal / total) * 100 : 0,
+        subcats: Array.from((subcatMap.get(label) ?? new Map()).entries())
+          .map(([sl, sa]) => ({
+            label: sl,
+            icon: catObj?.subcategories.find((s) => s.label === sl)?.icon || catIcon,
+            avg: sa / monthCount,
+            pct: catTotal > 0 ? (sa / catTotal) * 100 : 0,
+          }))
+          .sort((a, b) => b.avg - a.avg),
+      };
+    })
+    .sort((a, b) => b.avg - a.avg);
 }
 
-export default function Dashboard({ transactions }: Props) {
-  const [timeFilter, setTimeFilter]       = useState<TimeFilter>('1m');
-  const [selectedCatLabel, setSelectedCatLabel] = useState<string | null>(null);
+// ── Reusable category list renderer ─────────────────────────────────────
+function CategoryRows({
+  rows,
+  expandedCat,
+  onToggle,
+  subcatAmtColor,
+}: {
+  rows: CatRow[];
+  expandedCat: string | null;
+  onToggle: (label: string) => void;
+  subcatAmtColor: string;
+}) {
+  return (
+    <div style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #f3f4f6' }}>
+      {rows.map(({ label, icon, avg, pct, subcats }, idx) => (
+        <div key={label}>
+          <div
+            onClick={() => subcats.length > 0 && onToggle(label)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '10px',
+              padding: '13px 16px',
+              cursor: subcats.length > 0 ? 'pointer' : 'default',
+              borderTop: idx > 0 ? '1px solid #f9fafb' : 'none',
+              background: expandedCat === label ? '#fafafa' : 'white',
+            }}
+          >
+            <span style={{ fontSize: '20px', flexShrink: 0, width: '26px', textAlign: 'center' }}>{icon}</span>
+            <span style={{ flex: 1, fontSize: '14px', color: '#1f2937', fontWeight: 500 }}>
+              {label}
+              {subcats.length > 0 && (
+                <span style={{ fontSize: '10px', color: '#9ca3af', marginRight: '4px' }}>
+                  {expandedCat === label ? ' ▴' : ' ▾'}
+                </span>
+              )}
+            </span>
+            <span style={{ fontSize: '14px', fontWeight: 600, color: '#1f2937' }}>{fmt(avg)}</span>
+            <span style={{ fontSize: '12px', color: '#9ca3af', minWidth: '40px', textAlign: 'left' }}>{fmtPct(pct)}</span>
+          </div>
+
+          {expandedCat === label && subcats.map(({ label: sl, icon: si, avg: sa, pct: sp }) => (
+            <div key={sl} style={{
+              display: 'flex', alignItems: 'center', gap: '10px',
+              paddingTop: '10px', paddingBottom: '10px',
+              paddingRight: '36px', paddingLeft: '16px',
+              borderTop: '1px solid #f3f4f6',
+              background: '#f9fafb',
+            }}>
+              <span style={{ fontSize: '16px', flexShrink: 0, width: '22px', textAlign: 'center' }}>{si}</span>
+              <span style={{ flex: 1, fontSize: '13px', color: '#6b7280' }}>{sl}</span>
+              <span style={{ fontSize: '13px', fontWeight: 500, color: subcatAmtColor }}>{fmt(sa)}</span>
+              <span style={{ fontSize: '11px', color: '#9ca3af', minWidth: '40px', textAlign: 'left' }}>{fmtPct(sp)}</span>
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Savings rate trend chart (pure SVG, no libs) ─────────────────────────
+function SavingsTrendChart({
+  data,
+  selectedIdx,
+  onSelect,
+}: {
+  data: { month: string; rate: number }[];
+  selectedIdx: number | null;
+  onSelect: (idx: number) => void;
+}) {
+  if (data.length < 2) {
+    return (
+      <p style={{ textAlign: 'center', color: '#9ca3af', fontSize: '13px', padding: '10px 0' }}>
+        נדרשים לפחות 2 חודשים עם הכנסה
+      </p>
+    );
+  }
+
+  const W = 300, H = 72, PL = 10, PR = 10, PT = 12, PB = 10;
+  const iW = W - PL - PR, iH = H - PT - PB;
+
+  const rates = data.map((d) => d.rate);
+  const maxR  = Math.max(...rates, 5);
+  const minR  = Math.min(...rates, 0);
+  const range = Math.max(maxR - minR, 5);
+
+  const toX = (i: number) => PL + (i / (data.length - 1)) * iW;
+  const toY = (r: number) => PT + (1 - (r - minR) / range) * iH;
+
+  const pts      = data.map((d, i) => ({ ...d, x: toX(i), y: toY(d.rate) }));
+  const linePath = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+
+  const multiYear   = new Set(data.map((d) => d.month.slice(0, 4))).size > 1;
+  const chartHeight = H + (multiYear ? 14 : 0);
+  const sel         = selectedIdx !== null ? data[selectedIdx] : null;
+
+  return (
+    <div style={{ direction: 'ltr' }}>
+      <svg viewBox={`0 0 ${W} ${chartHeight}`} style={{ width: '100%', display: 'block' }}>
+        {/* dashed zero line when any month has negative savings */}
+        {minR < 0 && (
+          <line x1={PL} x2={W - PR} y1={toY(0).toFixed(1)} y2={toY(0).toFixed(1)}
+            stroke="#e5e7eb" strokeWidth={1} strokeDasharray="4,3" />
+        )}
+        {/* connecting line */}
+        <path d={linePath} fill="none" stroke="#6366f1" strokeWidth={2}
+          strokeLinecap="round" strokeLinejoin="round" />
+        {/* visible dots */}
+        {pts.map((p, i) => (
+          <circle key={i}
+            cx={p.x.toFixed(1)} cy={p.y.toFixed(1)}
+            r={selectedIdx === i ? 6 : 4}
+            fill={p.rate >= 0 ? '#6366f1' : '#ef4444'}
+            stroke="white" strokeWidth={selectedIdx === i ? 2.5 : 1.5}
+          />
+        ))}
+        {/* transparent hit areas for easier tapping */}
+        {pts.map((p, i) => (
+          <circle key={`h${i}`}
+            cx={p.x.toFixed(1)} cy={p.y.toFixed(1)} r={14}
+            fill="transparent" style={{ cursor: 'pointer' }}
+            onClick={() => onSelect(i)}
+          />
+        ))}
+        {/* year labels at boundaries (only when data spans multiple years) */}
+        {multiYear && pts.map((p, i) =>
+          (i === 0 || data[i].month.slice(5) === '01') ? (
+            <text key={i} x={p.x.toFixed(1)} y={H + 12}
+              textAnchor="middle" fontSize={9} fill="#9ca3af">
+              {data[i].month.slice(0, 4)}
+            </text>
+          ) : null
+        )}
+      </svg>
+
+      {/* Selected point info row */}
+      {sel ? (
+        <div style={{ direction: 'rtl', textAlign: 'center', marginTop: '8px', fontSize: '13px' }}>
+          <span style={{ color: '#374151', fontWeight: 500 }}>{fmtMonthHe(sel.month)}</span>
+          <span style={{ color: '#d1d5db', margin: '0 6px' }}>·</span>
+          <span style={{ fontWeight: 600, color: sel.rate >= 0 ? '#6366f1' : '#ef4444' }}>
+            {fmtPct(sel.rate)}
+          </span>
+        </div>
+      ) : (
+        <p style={{ textAlign: 'center', fontSize: '12px', color: '#d1d5db', marginTop: '6px' }}>
+          לחץ על נקודה לפרטים
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ── Subtle area separator label ──────────────────────────────────────────
+function AreaLabel({ children }: { children: string }) {
+  return (
+    <div style={{
+      textAlign: 'center', fontSize: '11px', color: '#9ca3af',
+      letterSpacing: '0.08em', fontWeight: 500,
+      padding: '20px 0 6px',
+    }}>
+      {children}
+    </div>
+  );
+}
+
+// ── Main component ────────────────────────────────────────────────────────
+export default function Dashboard({ transactions, categories }: Props) {
+  const [timeFilter,       setTimeFilter]       = useState<TimeFilter>('1m');
+  const [specificMonth,    setSpecificMonth]    = useState<string>(currentMonthStr());
+  const [expandedExpCat,   setExpandedExpCat]   = useState<string | null>(null);
+  const [expandedIncCat,   setExpandedIncCat]   = useState<string | null>(null);
+  const [selectedTrendIdx, setSelectedTrendIdx] = useState<number | null>(null);
 
   const filtered = useMemo(() => {
+    if (timeFilter === '1m') {
+      return transactions.filter((t) => t.date.slice(0, 7) === specificMonth);
+    }
     const start = getStartDate(timeFilter);
     if (!start) return transactions;
     return transactions.filter((t) => t.date >= start);
-  }, [transactions, timeFilter]);
+  }, [transactions, timeFilter, specificMonth]);
 
   const income   = useMemo(() => filtered.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0), [filtered]);
   const expenses = useMemo(() => filtered.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0), [filtered]);
@@ -60,56 +302,37 @@ export default function Dashboard({ transactions }: Props) {
     return Math.max(months.size, 1);
   }, [timeFilter, filtered]);
 
-  const avgIncome   = income   / monthCount;
-  const avgExpenses = expenses / monthCount;
-  const avgBalance  = balance  / monthCount;
+  const isMultiMonth    = monthCount > 1;
+  const displayIncome   = isMultiMonth ? income   / monthCount : income;
+  const displayExpenses = isMultiMonth ? expenses / monthCount : expenses;
+  const displayBalance  = isMultiMonth ? balance  / monthCount : balance;
 
-  const catExpenses = useMemo(() => {
-    const map = new Map<string, number>();
-    filtered.filter((t) => t.type === 'expense').forEach((t) => {
-      map.set(t.categoryLabel, (map.get(t.categoryLabel) ?? 0) + t.amount);
-    });
-    return Array.from(map.entries())
-      .map(([label, amount]) => ({ label, amount, pct: expenses > 0 ? (amount / expenses) * 100 : 0 }))
-      .sort((a, b) => b.amount - a.amount);
-  }, [filtered, expenses]);
-
-  const expenseCatLabels = useMemo(
-    () => [...new Set(filtered.filter((t) => t.type === 'expense' && t.subcategoryLabel).map((t) => t.categoryLabel))],
-    [filtered],
+  const catExpenses = useMemo(
+    () => buildCatRows(filtered, 'expense', expenses, monthCount, categories),
+    [filtered, expenses, monthCount, categories],
   );
 
-  const subcatBreakdown = useMemo(() => {
-    if (!selectedCatLabel) return [];
-    const map = new Map<string, number>();
-    filtered
-      .filter((t) => t.type === 'expense' && t.categoryLabel === selectedCatLabel && t.subcategoryLabel)
-      .forEach((t) => {
-        map.set(t.subcategoryLabel, (map.get(t.subcategoryLabel) ?? 0) + t.amount);
-      });
-    return Array.from(map.entries())
-      .map(([label, amount]) => ({ label, amount }))
-      .sort((a, b) => b.amount - a.amount);
-  }, [filtered, selectedCatLabel]);
+  const catIncome = useMemo(
+    () => buildCatRows(filtered, 'income', income, monthCount, categories),
+    [filtered, income, monthCount, categories],
+  );
 
-  const monthlyTrend = useMemo(() => {
-    const map = new Map<string, { income: number; expenses: number }>();
-    filtered.forEach((t) => {
-      const month = t.date.slice(0, 7);
-      if (!map.has(month)) map.set(month, { income: 0, expenses: 0 });
-      const entry = map.get(month)!;
-      if (t.type === 'income') entry.income += t.amount;
-      else entry.expenses += t.amount;
+  // Savings trend uses ALL transactions — unaffected by the time filter
+  const savingsTrend = useMemo(() => {
+    const map = new Map<string, { inc: number; exp: number }>();
+    transactions.forEach((t) => {
+      const mo = t.date.slice(0, 7);
+      if (!map.has(mo)) map.set(mo, { inc: 0, exp: 0 });
+      const e = map.get(mo)!;
+      if (t.type === 'income') e.inc += t.amount; else e.exp += t.amount;
     });
     return Array.from(map.entries())
-      .map(([month, { income: inc, expenses: exp }]) => ({ month, income: inc, expenses: exp, balance: inc - exp }))
+      .filter(([, { inc }]) => inc > 0)
+      .map(([month, { inc, exp }]) => ({ month, rate: ((inc - exp) / inc) * 100 }))
       .sort((a, b) => a.month.localeCompare(b.month));
-  }, [filtered]);
+  }, [transactions]);
 
-  const maxMonthVal = useMemo(
-    () => Math.max(...monthlyTrend.flatMap((m) => [m.income, m.expenses]), 1),
-    [monthlyTrend],
-  );
+  const today = currentMonthStr();
 
   return (
     <div className="dashboard">
@@ -117,17 +340,37 @@ export default function Dashboard({ transactions }: Props) {
         <h2 className="dashboard-title">דשבורד</h2>
       </div>
 
+      {/* Time filter */}
       <div className="dash-filter-row">
         {TIME_FILTERS.map((f) => (
           <button
             key={f.key}
             className={`dash-filter-btn${timeFilter === f.key ? ' active' : ''}`}
-            onClick={() => { setTimeFilter(f.key); setSelectedCatLabel(null); }}
+            onClick={() => { setTimeFilter(f.key); setExpandedExpCat(null); setExpandedIncCat(null); }}
           >
             {f.label}
           </button>
         ))}
       </div>
+
+      {/* Month navigator — only for 'החודש' */}
+      {timeFilter === '1m' && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', padding: '2px 0 10px', direction: 'ltr' }}>
+          <button style={NAV_BTN} onClick={() => setSpecificMonth(prevMonth(specificMonth))}>‹</button>
+          <span style={{ fontSize: '14px', fontWeight: 500, color: '#374151', background: '#f3f4f6', borderRadius: '20px', padding: '4px 16px' }}>
+            {fmtMonthHe(specificMonth)}
+          </span>
+          <button
+            style={{ ...NAV_BTN, color: specificMonth >= today ? '#d1d5db' : '#6b7280' }}
+            onClick={() => specificMonth < today && setSpecificMonth(nextMonth(specificMonth))}
+          >
+            ›
+          </button>
+        </div>
+      )}
+
+      {/* ── A. דוחות חודשיים ─────────────────────────────────── */}
+      <AreaLabel>דוחות חודשיים</AreaLabel>
 
       {filtered.length === 0 ? (
         <div className="dash-empty">
@@ -136,19 +379,22 @@ export default function Dashboard({ transactions }: Props) {
         </div>
       ) : (
         <>
-          {/* Summary cards */}
+          <div style={{ textAlign: 'center', fontSize: '12px', color: '#9ca3af', marginBottom: '4px' }}>
+            {isMultiMonth ? 'ממוצעים חודשיים' : 'סיכום חודשי'}
+          </div>
+
           <div className="dash-cards">
             <div className="dash-card">
-              <span className="dash-card-label">סה״כ הכנסות</span>
-              <span className="dash-card-value income">{fmt(income)}</span>
+              <span className="dash-card-label">הכנסות</span>
+              <span className="dash-card-value income">{fmt(displayIncome)}</span>
             </div>
             <div className="dash-card">
-              <span className="dash-card-label">סה״כ הוצאות</span>
-              <span className="dash-card-value expense">{fmt(expenses)}</span>
+              <span className="dash-card-label">הוצאות</span>
+              <span className="dash-card-value expense">{fmt(displayExpenses)}</span>
             </div>
             <div className="dash-card">
               <span className="dash-card-label">יתרה</span>
-              <span className={`dash-card-value${balance >= 0 ? ' income' : ' expense'}`}>{fmt(balance)}</span>
+              <span className={`dash-card-value${displayBalance >= 0 ? ' income' : ' expense'}`}>{fmt(displayBalance)}</span>
             </div>
             <div className="dash-card">
               <span className="dash-card-label">שיעור חיסכון</span>
@@ -156,114 +402,44 @@ export default function Dashboard({ transactions }: Props) {
             </div>
           </div>
 
-          {/* Monthly averages */}
-          <div className="dash-section">
-            <h3 className="dash-section-title">ממוצע חודשי</h3>
-            <div className="dash-avg-list">
-              <div className="dash-avg-row">
-                <span className="dash-avg-label">הכנסה חודשית ממוצעת</span>
-                <span className="dash-avg-value income">{fmt(avgIncome)}</span>
-              </div>
-              <div className="dash-avg-row">
-                <span className="dash-avg-label">הוצאה חודשית ממוצעת</span>
-                <span className="dash-avg-value expense">{fmt(avgExpenses)}</span>
-              </div>
-              <div className="dash-avg-row">
-                <span className="dash-avg-label">יתרה חודשית ממוצעת</span>
-                <span className={`dash-avg-value${avgBalance >= 0 ? ' income' : ' expense'}`}>{fmt(avgBalance)}</span>
-              </div>
-              <div className="dash-avg-row">
-                <span className="dash-avg-label">שיעור חיסכון ממוצע</span>
-                <span className="dash-avg-value">{savingsRate !== null ? fmtPct(savingsRate) : '—'}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Expenses by category */}
           {catExpenses.length > 0 && (
             <div className="dash-section">
               <h3 className="dash-section-title">הוצאות לפי קטגוריה</h3>
-              <div className="dash-cat-list">
-                {catExpenses.map(({ label, amount, pct }) => (
-                  <div key={label} className="dash-cat-row">
-                    <div className="dash-cat-info">
-                      <span className="dash-cat-label">{label}</span>
-                      <span className="dash-cat-pct">{fmtPct(pct)}</span>
-                    </div>
-                    <div className="dash-cat-bar-wrap">
-                      <div className="dash-cat-bar" style={{ width: `${pct}%` }} />
-                    </div>
-                    <span className="dash-cat-amount">{fmt(amount)}</span>
-                  </div>
-                ))}
-              </div>
+              <CategoryRows
+                rows={catExpenses}
+                expandedCat={expandedExpCat}
+                onToggle={(l) => setExpandedExpCat((p) => (p === l ? null : l))}
+                subcatAmtColor="#ef4444"
+              />
             </div>
           )}
 
-          {/* Subcategory breakdown */}
-          {expenseCatLabels.length > 0 && (
+          {catIncome.length > 0 && (
             <div className="dash-section">
-              <h3 className="dash-section-title">פירוט תת-קטגוריה</h3>
-              <div className="dash-filter-row dash-subcat-filter">
-                {expenseCatLabels.map((label) => (
-                  <button
-                    key={label}
-                    className={`dash-filter-btn${selectedCatLabel === label ? ' active' : ''}`}
-                    onClick={() => setSelectedCatLabel((prev) => (prev === label ? null : label))}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              {selectedCatLabel && subcatBreakdown.length > 0 && (
-                <div className="dash-avg-list">
-                  {subcatBreakdown.map(({ label, amount }) => (
-                    <div key={label} className="dash-avg-row">
-                      <span className="dash-avg-label">{label}</span>
-                      <span className="dash-avg-value expense">{fmt(amount)}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {selectedCatLabel && subcatBreakdown.length === 0 && (
-                <p className="dash-empty-note">אין נתוני תת-קטגוריה</p>
-              )}
+              <h3 className="dash-section-title">הכנסות לפי קטגוריה</h3>
+              <CategoryRows
+                rows={catIncome}
+                expandedCat={expandedIncCat}
+                onToggle={(l) => setExpandedIncCat((p) => (p === l ? null : l))}
+                subcatAmtColor="#16a34a"
+              />
             </div>
           )}
+        </>
+      )}
 
-          {/* Monthly trend */}
-          {monthlyTrend.length > 0 && (
-            <div className="dash-section">
-              <h3 className="dash-section-title">מגמה חודשית</h3>
-              <div className="dash-trend-list">
-                {monthlyTrend.map(({ month, income: inc, expenses: exp, balance: bal }) => (
-                  <div key={month} className="dash-trend-row">
-                    <span className="dash-trend-month">{fmtMonth(month)}</span>
-                    <div className="dash-trend-bars">
-                      <div className="dash-trend-bar-row">
-                        <span className="dash-trend-bar-label">הכנסה</span>
-                        <div className="dash-trend-bar-wrap">
-                          <div className="dash-trend-bar income" style={{ width: `${(inc / maxMonthVal) * 100}%` }} />
-                        </div>
-                        <span className="dash-trend-bar-amt income">{fmt(inc)}</span>
-                      </div>
-                      <div className="dash-trend-bar-row">
-                        <span className="dash-trend-bar-label">הוצאה</span>
-                        <div className="dash-trend-bar-wrap">
-                          <div className="dash-trend-bar expense" style={{ width: `${(exp / maxMonthVal) * 100}%` }} />
-                        </div>
-                        <span className="dash-trend-bar-amt expense">{fmt(exp)}</span>
-                      </div>
-                    </div>
-                    <div className="dash-trend-balance-row">
-                      <span className="dash-trend-balance-label">יתרה</span>
-                      <span className={`dash-trend-balance${bal >= 0 ? ' income' : ' expense'}`}>{fmt(bal)}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+      {/* ── B. דוחות כלליים ──────────────────────────────────── */}
+      {savingsTrend.length >= 1 && (
+        <>
+          <AreaLabel>דוחות כלליים</AreaLabel>
+          <div className="dash-section">
+            <h3 className="dash-section-title">מגמת שיעור חיסכון</h3>
+            <SavingsTrendChart
+              data={savingsTrend}
+              selectedIdx={selectedTrendIdx}
+              onSelect={(i) => setSelectedTrendIdx((p) => (p === i ? null : i))}
+            />
+          </div>
         </>
       )}
     </div>
