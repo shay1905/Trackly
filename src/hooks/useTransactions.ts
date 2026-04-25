@@ -184,12 +184,12 @@ export function useTransactions() {
     }));
   }
 
-  async function removeGroup(groupId: string) {
+  async function removeGroup(groupId: string, from: Transaction) {
     const ids = transactions
       .filter(
         (t) =>
-          t.installmentGroupId === groupId ||
-          t.recurrenceGroupId === groupId
+          (t.installmentGroupId === groupId || t.recurrenceGroupId === groupId) &&
+          t.date >= from.date
       )
       .map((t) => t.id);
 
@@ -205,13 +205,7 @@ export function useTransactions() {
       return;
     }
 
-    setTransactions((prev) =>
-      prev.filter(
-        (t) =>
-          t.installmentGroupId !== groupId &&
-          t.recurrenceGroupId !== groupId
-      )
-    );
+    setTransactions((prev) => prev.filter((t) => !ids.includes(t.id)));
   }
 
   return {

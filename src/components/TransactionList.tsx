@@ -68,6 +68,7 @@ function groupByDate(transactions: Transaction[]): [string, Transaction[]][] {
 interface PendingDelete {
   kind: 'single' | 'group';
   id: string;
+  transaction?: Transaction;
 }
 
 interface EditState {
@@ -90,7 +91,7 @@ interface Props {
   transactions: Transaction[];
   categories: Category[];
   onDelete: (id: string) => void;
-  onDeleteGroup: (groupId: string) => void;
+  onDeleteGroup: (groupId: string, from: Transaction) => void;
   onUpdate: (t: Transaction) => void;
   onUpdateGroup: (groupId: string, current: Transaction, groupSafe: GroupSafeUpdate) => void;
 }
@@ -179,17 +180,25 @@ export default function TransactionList({
   const confirmDelete = () => {
     if (!pendingDelete) return;
     if (pendingDelete.kind === 'single') onDelete(pendingDelete.id);
-    else onDeleteGroup(pendingDelete.id);
+    else if (pendingDelete.transaction) onDeleteGroup(pendingDelete.id, pendingDelete.transaction);
     setPendingDelete(null);
   };
 
   // ── Edit ─────────────────────────────────────────────────────────────────
   function openEdit(t: Transaction) {
+    const cat = categories.find((c) => c.numericId === t.categoryNumericId);
+    let subNumId = t.subcategoryNumericId ?? null;
+    if (subNumId == null && cat && cat.subcategories.length > 0) {
+      const defSub = cat.defaultSubcategoryId
+        ? cat.subcategories.find((s) => s.id === cat.defaultSubcategoryId)
+        : cat.subcategories[0];
+      subNumId = defSub?.numericId ?? null;
+    }
     setEditingTx(t);
     setEditState({
       amount: String(t.amount),
       catNumId: t.categoryNumericId,
-      subNumId: t.subcategoryNumericId ?? null,
+      subNumId,
       description: t.description,
       date: t.date,
     });
@@ -393,8 +402,8 @@ export default function TransactionList({
                         {groupId && (
                           <button
                             className="tx-delete-group"
-                            onClick={() => setPendingDelete({ kind: 'group', id: groupId })}
-                          >מחק סדרה</button>
+                            onClick={() => setPendingDelete({ kind: 'group', id: groupId, transaction: t })}
+                          >מחק מהמופע הזה והלאה</button>
                         )}
                         <button
                           className="tx-delete"
@@ -426,8 +435,8 @@ export default function TransactionList({
       {pendingDelete?.kind === 'group' && (
         <ConfirmDialog
           title="מחיקת סדרה"
-          message={'האם למחוק את כל הסדרה?\nפעולה זו תמחק את כל המופעים של החיוב.'}
-          confirmLabel="מחק סדרה"
+          message={'למחוק מהמופע הזה והלאה?\nמופעים קודמים יישארו ללא שינוי.'}
+          confirmLabel="מחק מהמופע הזה והלאה"
           cancelLabel="ביטול"
           danger
           onConfirm={confirmDelete}
@@ -442,132 +451,147 @@ export default function TransactionList({
           onClick={showGroupChoice ? undefined : closeAll}
         >
           <div
-            style={{ background: 'white', width: '100%', borderRadius: '20px 20px 0 0', padding: '16px 20px 44px', maxHeight: '90vh', overflowY: 'auto', boxSizing: 'border-box' }}
+            style={{ background: 'white', width: '100%', borderRadius: '20px 20px 0 0', maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxSizing: 'border-box' }}
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Drag handle */}
-            <div style={{ width: '40px', height: '4px', background: '#e5e7eb', borderRadius: '2px', margin: '0 auto 20px' }} />
-
-            {/* Header */}
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', marginBottom: '26px' }}>
-              <span style={{ fontSize: '36px', lineHeight: '1' }}>{getDisplayIcon(editingTx, categories)}</span>
-              <div style={{ fontSize: '17px', fontWeight: 700, color: '#1f2937' }}>עריכת עסקה</div>
-              <span style={{
-                fontSize: '12px', fontWeight: 600, padding: '3px 12px', borderRadius: '20px',
-                background: editingTx.type === 'expense' ? '#fee2e2' : '#dcfce7',
-                color:      editingTx.type === 'expense' ? '#dc2626' : '#16a34a',
-              }}>
-                {editingTx.type === 'expense' ? 'הוצאה' : 'הכנסה'}
-              </span>
+            {/* Top: handle + header */}
+            <div style={{ padding: '12px 20px 0', flexShrink: 0, position: 'relative' }}>
+              <div style={{ width: '40px', height: '4px', background: '#e5e7eb', borderRadius: '2px', margin: '0 auto 12px' }} />
+              <button
+                style={{ position: 'absolute', top: '12px', right: '16px', background: 'none', border: 'none', fontSize: '20px', color: '#9ca3af', cursor: 'pointer', padding: '4px', lineHeight: '1' }}
+                onClick={closeAll}
+              >✕</button>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px', marginBottom: '14px' }}>
+                <span style={{ fontSize: '32px', lineHeight: '1' }}>{getDisplayIcon(editingTx, categories)}</span>
+                <div style={{ fontSize: '16px', fontWeight: 700, color: '#1f2937' }}>עריכת עסקה</div>
+                <span style={{
+                  fontSize: '12px', fontWeight: 600, padding: '3px 12px', borderRadius: '20px',
+                  background: editingTx.type === 'expense' ? '#fee2e2' : '#dcfce7',
+                  color:      editingTx.type === 'expense' ? '#dc2626' : '#16a34a',
+                }}>
+                  {editingTx.type === 'expense' ? 'הוצאה' : 'הכנסה'}
+                </span>
+              </div>
             </div>
 
-            {/* Amount */}
-            <div style={{ marginBottom: '16px' }}>
-              <label style={LABEL_STYLE}>סכום (₪)</label>
-              <input
-                type="number"
-                inputMode="decimal"
-                style={{
-                  ...INPUT_BASE,
-                  fontSize: '22px', fontWeight: 500,
-                  textAlign: 'right', direction: 'ltr',
-                  background: 'white',
-                  border: `1.5px solid ${saveAttempted && !isValidAmt ? '#ef4444' : '#e5e7eb'}`,
-                }}
-                value={editState.amount}
-                onChange={(e) => setEditState((s) => s && ({ ...s, amount: e.target.value }))}
-              />
-              {saveAttempted && !isValidAmt && (
-                <div style={{ fontSize: '12px', color: '#ef4444', textAlign: 'right', marginTop: '5px' }}>
-                  נדרש סכום גדול מ-0
-                </div>
-              )}
-            </div>
+            {/* Scrollable fields */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px' }}>
 
-            {/* Category */}
-            <div style={{ marginBottom: '16px' }}>
-              <label style={LABEL_STYLE}>קטגוריה</label>
-              <select
-                style={{ ...INPUT_BASE, direction: 'rtl' }}
-                value={editState.catNumId ?? ''}
-                onChange={(e) => {
-                  const numId = e.target.value ? Number(e.target.value) : null;
-                  setEditState((s) => s && ({ ...s, catNumId: numId, subNumId: null }));
-                }}
-              >
-                {categories
-                  .filter((c) => (c as any).type === editingTx.type)
-                  .map((c) => (
-                    <option key={c.numericId} value={c.numericId ?? ''}>{c.icon} {c.label}</option>
-                  ))}
-              </select>
-            </div>
+              {/* Amount */}
+              <div style={{ marginBottom: '14px' }}>
+                <label style={LABEL_STYLE}>סכום (₪)</label>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  style={{
+                    ...INPUT_BASE,
+                    fontSize: '22px', fontWeight: 500,
+                    textAlign: 'right', direction: 'ltr',
+                    background: 'white',
+                    border: `1.5px solid ${saveAttempted && !isValidAmt ? '#ef4444' : '#e5e7eb'}`,
+                  }}
+                  value={editState.amount}
+                  onChange={(e) => setEditState((s) => s && ({ ...s, amount: e.target.value }))}
+                />
+                {saveAttempted && !isValidAmt && (
+                  <div style={{ fontSize: '12px', color: '#ef4444', textAlign: 'right', marginTop: '5px' }}>
+                    נדרש סכום גדול מ-0
+                  </div>
+                )}
+              </div>
 
-            {/* Subcategory */}
-            {editSubs.length > 0 && (
-              <div style={{ marginBottom: '16px' }}>
-                <label style={LABEL_STYLE}>תת-קטגוריה</label>
+              {/* Category */}
+              <div style={{ marginBottom: '14px' }}>
+                <label style={LABEL_STYLE}>קטגוריה</label>
                 <select
                   style={{ ...INPUT_BASE, direction: 'rtl' }}
-                  value={editState.subNumId ?? ''}
+                  value={editState.catNumId ?? ''}
                   onChange={(e) => {
                     const numId = e.target.value ? Number(e.target.value) : null;
-                    setEditState((s) => s && ({ ...s, subNumId: numId }));
+                    const newCat = numId != null ? categories.find((c) => c.numericId === numId) : null;
+                    const defSub = newCat?.subcategories.length
+                      ? (newCat.defaultSubcategoryId
+                          ? newCat.subcategories.find((s) => s.id === newCat.defaultSubcategoryId)
+                          : newCat.subcategories[0])
+                      : null;
+                    setEditState((s) => s && ({ ...s, catNumId: numId, subNumId: defSub?.numericId ?? null }));
                   }}
                 >
-                  <option value="">ללא</option>
-                  {editSubs.map((s) => (
-                    <option key={s.numericId} value={s.numericId ?? ''}>{s.icon} {s.label}</option>
-                  ))}
+                  {categories
+                    .filter((c) => (c as any).type === editingTx.type)
+                    .map((c) => (
+                      <option key={c.numericId} value={c.numericId ?? ''}>{c.icon} {c.label}</option>
+                    ))}
                 </select>
               </div>
-            )}
 
-            {/* Description */}
-            <div style={{ marginBottom: '16px' }}>
-              <label style={LABEL_STYLE}>תיאור</label>
-              <textarea
+              {/* Subcategory */}
+              {editSubs.length > 0 && (
+                <div style={{ marginBottom: '14px' }}>
+                  <label style={LABEL_STYLE}>תת-קטגוריה</label>
+                  <select
+                    style={{ ...INPUT_BASE, direction: 'rtl' }}
+                    value={editState.subNumId ?? ''}
+                    onChange={(e) => {
+                      const numId = e.target.value ? Number(e.target.value) : null;
+                      setEditState((s) => s && ({ ...s, subNumId: numId }));
+                    }}
+                  >
+                    {editSubs.map((s) => (
+                      <option key={s.numericId} value={s.numericId ?? ''}>{s.icon} {s.label}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Description */}
+              <div style={{ marginBottom: '14px' }}>
+                <label style={LABEL_STYLE}>תיאור</label>
+                <textarea
+                  style={{
+                    ...INPUT_BASE,
+                    resize: 'none', minHeight: '72px',
+                    direction: 'rtl', fontFamily: 'inherit', textAlign: 'right',
+                  }}
+                  value={editState.description}
+                  onChange={(e) => setEditState((s) => s && ({ ...s, description: e.target.value }))}
+                  placeholder="תיאור (אופציונלי)"
+                />
+              </div>
+
+              {/* Date */}
+              <div style={{ marginBottom: '14px' }}>
+                <label style={LABEL_STYLE}>תאריך</label>
+                <input
+                  type="date"
+                  style={{ ...INPUT_BASE, direction: 'ltr' }}
+                  value={editState.date}
+                  onChange={(e) => setEditState((s) => s && ({ ...s, date: e.target.value }))}
+                />
+              </div>
+
+            </div>
+
+            {/* Footer */}
+            <div style={{ padding: '12px 20px 28px', flexShrink: 0 }}>
+              <button
                 style={{
-                  ...INPUT_BASE,
-                  resize: 'none', minHeight: '78px',
-                  direction: 'rtl', fontFamily: 'inherit', textAlign: 'right',
+                  width: '100%', border: 'none', borderRadius: '14px',
+                  padding: '14px', fontSize: '16px', fontWeight: 700,
+                  background: canSave ? '#2563eb' : '#e5e7eb',
+                  color:      canSave ? 'white'   : '#9ca3af',
+                  cursor:     canSave ? 'pointer'  : 'not-allowed',
+                  marginBottom: '8px',
                 }}
-                value={editState.description}
-                onChange={(e) => setEditState((s) => s && ({ ...s, description: e.target.value }))}
-                placeholder="תיאור (אופציונלי)"
-              />
+                onClick={handleSavePress}
+                disabled={!canSave}
+              >שמור שינויים</button>
+
+              <button
+                style={{ width: '100%', background: 'none', border: 'none', color: '#6b7280', fontSize: '15px', cursor: 'pointer', padding: '8px' }}
+                onClick={closeAll}
+              >ביטול</button>
             </div>
-
-            {/* Date */}
-            <div style={{ marginBottom: '28px' }}>
-              <label style={LABEL_STYLE}>תאריך</label>
-              <input
-                type="date"
-                style={{ ...INPUT_BASE, direction: 'ltr' }}
-                value={editState.date}
-                onChange={(e) => setEditState((s) => s && ({ ...s, date: e.target.value }))}
-              />
-            </div>
-
-            {/* Save */}
-            <button
-              style={{
-                width: '100%', border: 'none', borderRadius: '14px',
-                padding: '15px', fontSize: '16px', fontWeight: 700,
-                background: canSave ? '#2563eb' : '#e5e7eb',
-                color:      canSave ? 'white'   : '#9ca3af',
-                cursor:     canSave ? 'pointer'  : 'not-allowed',
-                marginBottom: '10px',
-              }}
-              onClick={handleSavePress}
-              disabled={!canSave}
-            >שמור שינויים</button>
-
-            {/* Cancel */}
-            <button
-              style={{ width: '100%', background: 'none', border: 'none', color: '#6b7280', fontSize: '15px', cursor: 'pointer', padding: '8px' }}
-              onClick={closeAll}
-            >ביטול</button>
           </div>
         </div>
       )}
