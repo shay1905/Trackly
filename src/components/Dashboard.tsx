@@ -7,6 +7,7 @@ interface Props {
 }
 
 type TimeFilter = '1m' | '3m' | '6m' | '12m' | 'all';
+type TabType = 'monthly' | 'general';
 
 const TIME_FILTERS: { key: TimeFilter; label: string }[] = [
   { key: '1m',  label: 'החודש' },
@@ -258,21 +259,9 @@ function SavingsTrendChart({
   );
 }
 
-// ── Subtle area separator label ──────────────────────────────────────────
-function AreaLabel({ children }: { children: string }) {
-  return (
-    <div style={{
-      textAlign: 'center', fontSize: '11px', color: '#9ca3af',
-      letterSpacing: '0.08em', fontWeight: 500,
-      padding: '20px 0 6px',
-    }}>
-      {children}
-    </div>
-  );
-}
-
 // ── Main component ────────────────────────────────────────────────────────
 export default function Dashboard({ transactions, categories }: Props) {
+  const [activeTab,        setActiveTab]        = useState<TabType>('monthly');
   const [timeFilter,       setTimeFilter]       = useState<TimeFilter>('1m');
   const [specificMonth,    setSpecificMonth]    = useState<string>(currentMonthStr());
   const [expandedExpCat,   setExpandedExpCat]   = useState<string | null>(null);
@@ -334,113 +323,139 @@ export default function Dashboard({ transactions, categories }: Props) {
 
   const today = currentMonthStr();
 
+  const TABS: { key: TabType; label: string }[] = [
+    { key: 'monthly', label: 'דוחות חודשיים' },
+    { key: 'general', label: 'דוחות כלליים' },
+  ];
+
   return (
     <div className="dashboard">
       <div className="dashboard-header">
         <h2 className="dashboard-title">דשבורד</h2>
       </div>
 
-      {/* Time filter */}
-      <div className="dash-filter-row">
-        {TIME_FILTERS.map((f) => (
+      {/* Segmented tab control */}
+      <div style={{ display: 'flex', background: '#f3f4f6', borderRadius: '10px', padding: '3px', margin: '0 0 16px', direction: 'rtl' }}>
+        {TABS.map(({ key, label }) => (
           <button
-            key={f.key}
-            className={`dash-filter-btn${timeFilter === f.key ? ' active' : ''}`}
-            onClick={() => { setTimeFilter(f.key); setExpandedExpCat(null); setExpandedIncCat(null); }}
+            key={key}
+            onClick={() => setActiveTab(key)}
+            style={{
+              flex: 1, padding: '8px 0', border: 'none',
+              borderRadius: '8px', fontSize: '13px',
+              fontWeight: activeTab === key ? 600 : 400,
+              color: activeTab === key ? '#1f2937' : '#9ca3af',
+              background: activeTab === key ? 'white' : 'transparent',
+              cursor: 'pointer',
+              boxShadow: activeTab === key ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+              transition: 'all 0.15s',
+            }}
           >
-            {f.label}
+            {label}
           </button>
         ))}
       </div>
 
-      {/* Month navigator — only for 'החודש' */}
-      {timeFilter === '1m' && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', padding: '2px 0 10px', direction: 'ltr' }}>
-          <button style={NAV_BTN} onClick={() => setSpecificMonth(prevMonth(specificMonth))}>‹</button>
-          <span style={{ fontSize: '14px', fontWeight: 500, color: '#374151', background: '#f3f4f6', borderRadius: '20px', padding: '4px 16px' }}>
-            {fmtMonthHe(specificMonth)}
-          </span>
-          <button
-            style={{ ...NAV_BTN, color: specificMonth >= today ? '#d1d5db' : '#6b7280' }}
-            onClick={() => specificMonth < today && setSpecificMonth(nextMonth(specificMonth))}
-          >
-            ›
-          </button>
-        </div>
-      )}
-
-      {/* ── A. דוחות חודשיים ─────────────────────────────────── */}
-      <AreaLabel>דוחות חודשיים</AreaLabel>
-
-      {filtered.length === 0 ? (
-        <div className="dash-empty">
-          <span className="dash-empty-icon">📊</span>
-          <p>אין נתונים לתקופה זו</p>
-        </div>
-      ) : (
+      {/* ── Tab: דוחות חודשיים ───────────────────────────────── */}
+      {activeTab === 'monthly' && (
         <>
-          <div style={{ textAlign: 'center', fontSize: '12px', color: '#9ca3af', marginBottom: '4px' }}>
-            {isMultiMonth ? 'ממוצעים חודשיים' : 'סיכום חודשי'}
+          {/* Time filter */}
+          <div className="dash-filter-row">
+            {TIME_FILTERS.map((f) => (
+              <button
+                key={f.key}
+                className={`dash-filter-btn${timeFilter === f.key ? ' active' : ''}`}
+                onClick={() => { setTimeFilter(f.key); setExpandedExpCat(null); setExpandedIncCat(null); }}
+              >
+                {f.label}
+              </button>
+            ))}
           </div>
 
-          <div className="dash-cards">
-            <div className="dash-card">
-              <span className="dash-card-label">הכנסות</span>
-              <span className="dash-card-value income">{fmt(displayIncome)}</span>
-            </div>
-            <div className="dash-card">
-              <span className="dash-card-label">הוצאות</span>
-              <span className="dash-card-value expense">{fmt(displayExpenses)}</span>
-            </div>
-            <div className="dash-card">
-              <span className="dash-card-label">יתרה</span>
-              <span className={`dash-card-value${displayBalance >= 0 ? ' income' : ' expense'}`}>{fmt(displayBalance)}</span>
-            </div>
-            <div className="dash-card">
-              <span className="dash-card-label">שיעור חיסכון</span>
-              <span className="dash-card-value">{savingsRate !== null ? fmtPct(savingsRate) : '—'}</span>
-            </div>
-          </div>
-
-          {catExpenses.length > 0 && (
-            <div className="dash-section">
-              <h3 className="dash-section-title">הוצאות לפי קטגוריה</h3>
-              <CategoryRows
-                rows={catExpenses}
-                expandedCat={expandedExpCat}
-                onToggle={(l) => setExpandedExpCat((p) => (p === l ? null : l))}
-                subcatAmtColor="#ef4444"
-              />
+          {/* Month navigator — only for 'החודש' */}
+          {timeFilter === '1m' && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', padding: '2px 0 10px', direction: 'ltr' }}>
+              <button style={NAV_BTN} onClick={() => setSpecificMonth(prevMonth(specificMonth))}>‹</button>
+              <span style={{ fontSize: '14px', fontWeight: 500, color: '#374151', background: '#f3f4f6', borderRadius: '20px', padding: '4px 16px' }}>
+                {fmtMonthHe(specificMonth)}
+              </span>
+              <button
+                style={{ ...NAV_BTN, color: specificMonth >= today ? '#d1d5db' : '#6b7280' }}
+                onClick={() => specificMonth < today && setSpecificMonth(nextMonth(specificMonth))}
+              >
+                ›
+              </button>
             </div>
           )}
 
-          {catIncome.length > 0 && (
-            <div className="dash-section">
-              <h3 className="dash-section-title">הכנסות לפי קטגוריה</h3>
-              <CategoryRows
-                rows={catIncome}
-                expandedCat={expandedIncCat}
-                onToggle={(l) => setExpandedIncCat((p) => (p === l ? null : l))}
-                subcatAmtColor="#16a34a"
-              />
+          {filtered.length === 0 ? (
+            <div className="dash-empty">
+              <span className="dash-empty-icon">📊</span>
+              <p>אין נתונים לתקופה זו</p>
             </div>
+          ) : (
+            <>
+              <div style={{ textAlign: 'center', fontSize: '12px', color: '#9ca3af', marginBottom: '4px' }}>
+                {isMultiMonth ? 'ממוצעים חודשיים' : 'סיכום חודשי'}
+              </div>
+
+              <div className="dash-cards">
+                <div className="dash-card">
+                  <span className="dash-card-label">הכנסות</span>
+                  <span className="dash-card-value income">{fmt(displayIncome)}</span>
+                </div>
+                <div className="dash-card">
+                  <span className="dash-card-label">הוצאות</span>
+                  <span className="dash-card-value expense">{fmt(displayExpenses)}</span>
+                </div>
+                <div className="dash-card">
+                  <span className="dash-card-label">יתרה</span>
+                  <span className={`dash-card-value${displayBalance >= 0 ? ' income' : ' expense'}`}>{fmt(displayBalance)}</span>
+                </div>
+                <div className="dash-card">
+                  <span className="dash-card-label">שיעור חיסכון</span>
+                  <span className="dash-card-value">{savingsRate !== null ? fmtPct(savingsRate) : '—'}</span>
+                </div>
+              </div>
+
+              {catExpenses.length > 0 && (
+                <div className="dash-section">
+                  <h3 className="dash-section-title">הוצאות לפי קטגוריה</h3>
+                  <CategoryRows
+                    rows={catExpenses}
+                    expandedCat={expandedExpCat}
+                    onToggle={(l) => setExpandedExpCat((p) => (p === l ? null : l))}
+                    subcatAmtColor="#ef4444"
+                  />
+                </div>
+              )}
+
+              {catIncome.length > 0 && (
+                <div className="dash-section">
+                  <h3 className="dash-section-title">הכנסות לפי קטגוריה</h3>
+                  <CategoryRows
+                    rows={catIncome}
+                    expandedCat={expandedIncCat}
+                    onToggle={(l) => setExpandedIncCat((p) => (p === l ? null : l))}
+                    subcatAmtColor="#16a34a"
+                  />
+                </div>
+              )}
+            </>
           )}
         </>
       )}
 
-      {/* ── B. דוחות כלליים ──────────────────────────────────── */}
-      {savingsTrend.length >= 1 && (
-        <>
-          <AreaLabel>דוחות כלליים</AreaLabel>
-          <div className="dash-section">
-            <h3 className="dash-section-title">מגמת שיעור חיסכון</h3>
-            <SavingsTrendChart
-              data={savingsTrend}
-              selectedIdx={selectedTrendIdx}
-              onSelect={(i) => setSelectedTrendIdx((p) => (p === i ? null : i))}
-            />
-          </div>
-        </>
+      {/* ── Tab: דוחות כלליים ────────────────────────────────── */}
+      {activeTab === 'general' && (
+        <div className="dash-section">
+          <h3 className="dash-section-title">מגמת שיעור חיסכון</h3>
+          <SavingsTrendChart
+            data={savingsTrend}
+            selectedIdx={selectedTrendIdx}
+            onSelect={(i) => setSelectedTrendIdx((p) => (p === i ? null : i))}
+          />
+        </div>
       )}
     </div>
   );
