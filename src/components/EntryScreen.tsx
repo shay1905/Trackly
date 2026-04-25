@@ -10,6 +10,7 @@ import SubcategoryRow from './SubcategoryRow';
 import AmountInput from './AmountInput';
 import AdvancedSection from './AdvancedSection';
 import TransactionList from './TransactionList';
+import Dashboard from './Dashboard';
 import NewCategoryModal from './NewCategoryModal';
 import ConfirmDialog from './ConfirmDialog';
 import EditItemModal from './EditItemModal';
@@ -49,7 +50,7 @@ function splitInstallments(total: number, count: number): number[] {
   return amounts;
 }
 
-type View = 'entry' | 'history';
+type View = 'entry' | 'history' | 'dashboard';
 
 interface DeleteTarget { kind: 'category' | 'subcategory'; id: string; }
 interface EditTarget   { kind: 'category' | 'subcategory'; id: string; icon: string; label: string; }
@@ -416,9 +417,9 @@ export default function EntryScreen() {
             title="הוספת עסקה"
           >✚</button>
           <button
-            className="nav-btn"
-            disabled
-            title="דשבורד (בקרוב)"
+            className={`nav-btn${view === 'dashboard' ? ' active' : ''}`}
+            onClick={() => setView('dashboard')}
+            title="דשבורד"
           >📊</button>
           <button
             className={`nav-btn${view === 'history' ? ' active' : ''}`}
@@ -435,6 +436,8 @@ export default function EntryScreen() {
           onDelete={removeTransaction}
           onDeleteGroup={removeGroup}
         />
+      ) : view === 'dashboard' ? (
+        <Dashboard transactions={transactions} />
       ) : (
         <>
           <div className="type-toggle">
