@@ -89,7 +89,7 @@ export default function EntryScreen() {
     return () => document.removeEventListener('pointerdown', handler);
   }, [editMode]);
 
-  const { transactions, addTransactions, removeTransaction, removeGroup } = useTransactions();
+  const { transactions, addTransactions, removeTransaction, removeGroup, updateTransaction, updateTransactionGroup } = useTransactions();
   const {
     categories: allCategories,
     loading: categoriesLoading,
@@ -435,6 +435,8 @@ export default function EntryScreen() {
           categories={allCategories}
           onDelete={removeTransaction}
           onDeleteGroup={removeGroup}
+          onUpdate={updateTransaction}
+          onUpdateGroup={updateTransactionGroup}
         />
       ) : view === 'dashboard' ? (
         <Dashboard transactions={transactions} categories={allCategories} />
@@ -515,6 +517,7 @@ export default function EntryScreen() {
                       onItemMenu={handleCategoryMenu}
                       onEnterEditMode={() => setEditMode(true)}
                       editMode={editMode}
+                      showAddButton
                       error={errors.categoryId}
                     />
                   )}

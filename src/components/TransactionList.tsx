@@ -1,4 +1,4 @@
-import { useRef, useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { Category, Transaction } from '../types';
 import ConfirmDialog from './ConfirmDialog';
 import { useLongPress } from '../hooks/useLongPress';
@@ -15,12 +15,31 @@ function getDisplayIcon(t: Transaction, categories: Category[]): string {
   return '🏷️';
 }
 
-type DateFilter = 'until-today' | 'future' | 'last-30';
+const HE_MONTHS = ['ינו׳','פבר׳','מרץ','אפר׳','מאי','יוני','יולי','אוג׳','ספט׳','אוק׳','נוב׳','דצמ׳'];
+
+function currentMonthStr(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+function prevMonth(ym: string): string {
+  const [y, m] = ym.split('-').map(Number);
+  return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
+}
+function nextMonth(ym: string): string {
+  const [y, m] = ym.split('-').map(Number);
+  return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
+}
+function fmtMonthHe(ym: string): string {
+  const [y, m] = ym.split('-').map(Number);
+  return `${HE_MONTHS[m - 1]} ${y}`;
+}
+
+type DateFilter = 'this-month' | 'until-today' | 'future';
 
 const FILTERS: { value: DateFilter; label: string }[] = [
+  { value: 'this-month',  label: 'החודש' },
   { value: 'until-today', label: 'עד היום' },
   { value: 'future',      label: 'עתידיות' },
-  { value: 'last-30',     label: '30 ימים אחרונים' },
 ];
 
 const RECURRENCE_LABELS: Record<string, string> = {
@@ -29,11 +48,6 @@ const RECURRENCE_LABELS: Record<string, string> = {
 
 function todayStr() {
   return new Date().toISOString().split('T')[0];
-}
-function daysAgoStr(n: number) {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return d.toISOString().split('T')[0];
 }
 
 function formatDate(dateStr: string): string {
@@ -56,9 +70,20 @@ interface PendingDelete {
   id: string;
 }
 
-interface Popup {
-  desc: string;
-  y: number;
+interface EditState {
+  amount: string;
+  catNumId: number | null;
+  subNumId: number | null;
+  description: string;
+  date: string;
+}
+
+export interface GroupSafeUpdate {
+  categoryNumericId: number | null;
+  categoryLabel: string;
+  subcategoryNumericId: number | null;
+  subcategoryLabel: string;
+  description: string;
 }
 
 interface Props {
@@ -66,20 +91,42 @@ interface Props {
   categories: Category[];
   onDelete: (id: string) => void;
   onDeleteGroup: (groupId: string) => void;
+  onUpdate: (t: Transaction) => void;
+  onUpdateGroup: (groupId: string, current: Transaction, groupSafe: GroupSafeUpdate) => void;
 }
 
-export default function TransactionList({ transactions, categories, onDelete, onDeleteGroup }: Props) {
-  const [filter,        setFilter]        = useState<DateFilter>('until-today');
-  const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
-  const [search,        setSearch]        = useState('');
-  const [popup,         setPopup]         = useState<Popup | null>(null);
-  const [selectedCatId, setSelectedCatId] = useState<number | null>(null);
-  const [selectedSubId, setSelectedSubId] = useState<number | null>(null);
-  const pointerYRef = useRef(0);
+// Reusable field label style
+const LABEL_STYLE = {
+  fontSize: '13px', color: '#6b7280',
+  display: 'block', marginBottom: '6px', textAlign: 'right' as const,
+};
+
+// Shared input/select style base
+const INPUT_BASE = {
+  width: '100%', boxSizing: 'border-box' as const,
+  border: '1.5px solid #e5e7eb', borderRadius: '12px',
+  padding: '13px 14px', fontSize: '15px',
+  background: '#fafafa',
+};
+
+export default function TransactionList({
+  transactions, categories, onDelete, onDeleteGroup, onUpdate, onUpdateGroup,
+}: Props) {
+  const [filter,          setFilter]          = useState<DateFilter>('this-month');
+  const [selectedMonth,   setSelectedMonth]   = useState(currentMonthStr);
+  const [pendingDelete,   setPendingDelete]   = useState<PendingDelete | null>(null);
+  const [search,          setSearch]          = useState('');
+  const [selectedCatId,   setSelectedCatId]   = useState<number | null>(null);
+  const [selectedSubId,   setSelectedSubId]   = useState<number | null>(null);
+  const [editingTx,       setEditingTx]       = useState<Transaction | null>(null);
+  const [editState,       setEditState]       = useState<EditState | null>(null);
+  const [saveAttempted,   setSaveAttempted]   = useState(false);
+  const [pendingUpdate,   setPendingUpdate]   = useState<Transaction | null>(null);
+  const [showGroupChoice, setShowGroupChoice] = useState(false);
   const lp = useLongPress(500);
 
-  const today     = todayStr();
-  const thirtyAgo = daysAgoStr(30);
+  const today        = todayStr();
+  const currentMonth = currentMonthStr();
 
   const uniqueCats = useMemo(() => {
     const seen = new Set<number>();
@@ -112,9 +159,9 @@ export default function TransactionList({ transactions, categories, onDelete, on
   const filtered = transactions
     .filter((t) => {
       switch (filter) {
+        case 'this-month':  return t.date.startsWith(selectedMonth);
         case 'until-today': return t.date <= today;
         case 'future':      return t.date > today;
-        case 'last-30':     return t.date >= thirtyAgo && t.date <= today;
       }
     })
     .filter((t) => !search || t.description.toLowerCase().includes(search.toLowerCase()))
@@ -128,6 +175,7 @@ export default function TransactionList({ transactions, categories, onDelete, on
 
   const groups = groupByDate(filtered);
 
+  // ── Delete ──────────────────────────────────────────────────────────────
   const confirmDelete = () => {
     if (!pendingDelete) return;
     if (pendingDelete.kind === 'single') onDelete(pendingDelete.id);
@@ -135,12 +183,75 @@ export default function TransactionList({ transactions, categories, onDelete, on
     setPendingDelete(null);
   };
 
-  const popupTop = popup
-    ? Math.max(60, Math.min(popup.y - 30, window.innerHeight - 100))
-    : 0;
+  // ── Edit ─────────────────────────────────────────────────────────────────
+  function openEdit(t: Transaction) {
+    setEditingTx(t);
+    setEditState({
+      amount: String(t.amount),
+      catNumId: t.categoryNumericId,
+      subNumId: t.subcategoryNumericId ?? null,
+      description: t.description,
+      date: t.date,
+    });
+    setSaveAttempted(false);
+  }
+
+  function closeAll() {
+    setEditingTx(null);
+    setEditState(null);
+    setPendingUpdate(null);
+    setShowGroupChoice(false);
+    setSaveAttempted(false);
+  }
+
+  function handleSavePress() {
+    setSaveAttempted(true);
+    if (!editingTx || !editState) return;
+    const amount = parseFloat(editState.amount);
+    if (isNaN(amount) || amount <= 0) return;
+
+    const cat = categories.find((c) => c.numericId === editState.catNumId);
+    const sub = cat?.subcategories.find((s) => s.numericId === editState.subNumId);
+
+    const updatedTx: Transaction = {
+      ...editingTx,
+      amount,
+      categoryNumericId: editState.catNumId,
+      categoryLabel: cat?.label ?? editingTx.categoryLabel,
+      subcategoryNumericId: editState.subNumId ?? null,
+      subcategoryLabel: sub?.label ?? '',
+      description: editState.description,
+      date: editState.date,
+    };
+
+    const groupId = editingTx.installmentGroupId ?? editingTx.recurrenceGroupId;
+    if (groupId) {
+      setPendingUpdate(updatedTx);
+      setShowGroupChoice(true);
+    } else {
+      onUpdate(updatedTx);
+      closeAll();
+    }
+  }
+
+  // ── Derived edit state ───────────────────────────────────────────────────
+  const amountNum    = editState ? parseFloat(editState.amount) : NaN;
+  const isValidAmt   = !isNaN(amountNum) && amountNum > 0;
+  const canSave      = isValidAmt && !!editState?.catNumId;
+  const editCat      = editState ? categories.find((c) => c.numericId === editState.catNumId) : null;
+  const editSubs     = editCat?.subcategories ?? [];
+
+  const amountOrDateChanged = !!(
+    pendingUpdate && editingTx && (
+      pendingUpdate.amount !== editingTx.amount ||
+      pendingUpdate.date   !== editingTx.date
+    )
+  );
 
   return (
     <div className="history-container">
+
+      {/* ── Filters ── */}
       <div className="history-filter-row">
         {FILTERS.map((f) => (
           <button
@@ -154,6 +265,23 @@ export default function TransactionList({ transactions, categories, onDelete, on
         ))}
       </div>
 
+      {filter === 'this-month' && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', padding: '2px 0 10px', direction: 'ltr' }}>
+          <button
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '20px', color: '#6b7280', padding: '0 6px', lineHeight: '1' }}
+            onClick={() => setSelectedMonth(prevMonth(selectedMonth))}
+          >‹</button>
+          <span style={{ fontSize: '14px', fontWeight: 500, color: '#374151', background: '#f3f4f6', borderRadius: '20px', padding: '4px 16px' }}>
+            {fmtMonthHe(selectedMonth)}
+          </span>
+          <button
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '20px', padding: '0 6px', lineHeight: '1', color: selectedMonth >= currentMonth ? '#d1d5db' : '#6b7280' }}
+            onClick={() => selectedMonth < currentMonth && setSelectedMonth(nextMonth(selectedMonth))}
+          >›</button>
+        </div>
+      )}
+
+      {/* ── Search ── */}
       <div className="history-search-wrap">
         <input
           className="history-search"
@@ -167,6 +295,7 @@ export default function TransactionList({ transactions, categories, onDelete, on
         )}
       </div>
 
+      {/* ── Category chips ── */}
       {uniqueCats.length > 0 && (
         <div className="cat-chip-row">
           <button
@@ -178,10 +307,7 @@ export default function TransactionList({ transactions, categories, onDelete, on
             <button
               key={c.numericId}
               className={`cat-chip${selectedCatId === c.numericId ? ' active' : ''}`}
-              onClick={() => {
-                setSelectedCatId(c.numericId);
-                setSelectedSubId(null);
-              }}
+              onClick={() => { setSelectedCatId(c.numericId); setSelectedSubId(null); }}
               type="button"
             >{c.icon} {c.label}</button>
           ))}
@@ -201,6 +327,7 @@ export default function TransactionList({ transactions, categories, onDelete, on
         </div>
       )}
 
+      {/* ── Transaction list ── */}
       {filtered.length === 0 ? (
         <div className="history-empty">
           <div className="history-empty-icon">📭</div>
@@ -223,14 +350,12 @@ export default function TransactionList({ transactions, categories, onDelete, on
                     className={`tx-item ${t.type}${lp.pressingId === t.id ? ' tx-pressing' : ''}`}
                     onPointerDown={(e) => {
                       if ((e.target as HTMLElement).closest('button')) return;
-                      if (!t.description) return;
-                      pointerYRef.current = e.clientY;
-                      lp.start(t.id, () => setPopup({ desc: t.description, y: pointerYRef.current }));
+                      lp.start(t.id, () => openEdit(t));
                     }}
                     onPointerUp={() => lp.cancel()}
                     onPointerCancel={() => lp.cancel()}
                     onPointerLeave={() => lp.cancel()}
-                    onContextMenu={(e) => { if (t.description) e.preventDefault(); }}
+                    onContextMenu={(e) => e.preventDefault()}
                   >
                     <div className="tx-icon-wrap">
                       <span className="tx-icon">{getDisplayIcon(t, categories)}</span>
@@ -285,14 +410,7 @@ export default function TransactionList({ transactions, categories, onDelete, on
         </div>
       )}
 
-      {popup && (
-        <div className="desc-popup-overlay" onClick={() => setPopup(null)}>
-          <div className="desc-popup" style={{ top: popupTop }}>
-            {popup.desc}
-          </div>
-        </div>
-      )}
-
+      {/* ── Delete confirms ── */}
       {pendingDelete?.kind === 'single' && (
         <ConfirmDialog
           title="מחיקת דיווח"
@@ -315,6 +433,195 @@ export default function TransactionList({ transactions, categories, onDelete, on
           onConfirm={confirmDelete}
           onCancel={() => setPendingDelete(null)}
         />
+      )}
+
+      {/* ── Edit bottom sheet ── */}
+      {editingTx && editState && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 200, display: 'flex', alignItems: 'flex-end' }}
+          onClick={showGroupChoice ? undefined : closeAll}
+        >
+          <div
+            style={{ background: 'white', width: '100%', borderRadius: '20px 20px 0 0', padding: '16px 20px 44px', maxHeight: '90vh', overflowY: 'auto', boxSizing: 'border-box' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Drag handle */}
+            <div style={{ width: '40px', height: '4px', background: '#e5e7eb', borderRadius: '2px', margin: '0 auto 20px' }} />
+
+            {/* Header */}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', marginBottom: '26px' }}>
+              <span style={{ fontSize: '36px', lineHeight: '1' }}>{getDisplayIcon(editingTx, categories)}</span>
+              <div style={{ fontSize: '17px', fontWeight: 700, color: '#1f2937' }}>עריכת עסקה</div>
+              <span style={{
+                fontSize: '12px', fontWeight: 600, padding: '3px 12px', borderRadius: '20px',
+                background: editingTx.type === 'expense' ? '#fee2e2' : '#dcfce7',
+                color:      editingTx.type === 'expense' ? '#dc2626' : '#16a34a',
+              }}>
+                {editingTx.type === 'expense' ? 'הוצאה' : 'הכנסה'}
+              </span>
+            </div>
+
+            {/* Amount */}
+            <div style={{ marginBottom: '16px' }}>
+              <label style={LABEL_STYLE}>סכום (₪)</label>
+              <input
+                type="number"
+                inputMode="decimal"
+                style={{
+                  ...INPUT_BASE,
+                  fontSize: '22px', fontWeight: 500,
+                  textAlign: 'right', direction: 'ltr',
+                  background: 'white',
+                  border: `1.5px solid ${saveAttempted && !isValidAmt ? '#ef4444' : '#e5e7eb'}`,
+                }}
+                value={editState.amount}
+                onChange={(e) => setEditState((s) => s && ({ ...s, amount: e.target.value }))}
+              />
+              {saveAttempted && !isValidAmt && (
+                <div style={{ fontSize: '12px', color: '#ef4444', textAlign: 'right', marginTop: '5px' }}>
+                  נדרש סכום גדול מ-0
+                </div>
+              )}
+            </div>
+
+            {/* Category */}
+            <div style={{ marginBottom: '16px' }}>
+              <label style={LABEL_STYLE}>קטגוריה</label>
+              <select
+                style={{ ...INPUT_BASE, direction: 'rtl' }}
+                value={editState.catNumId ?? ''}
+                onChange={(e) => {
+                  const numId = e.target.value ? Number(e.target.value) : null;
+                  setEditState((s) => s && ({ ...s, catNumId: numId, subNumId: null }));
+                }}
+              >
+                {categories
+                  .filter((c) => (c as any).type === editingTx.type)
+                  .map((c) => (
+                    <option key={c.numericId} value={c.numericId ?? ''}>{c.icon} {c.label}</option>
+                  ))}
+              </select>
+            </div>
+
+            {/* Subcategory */}
+            {editSubs.length > 0 && (
+              <div style={{ marginBottom: '16px' }}>
+                <label style={LABEL_STYLE}>תת-קטגוריה</label>
+                <select
+                  style={{ ...INPUT_BASE, direction: 'rtl' }}
+                  value={editState.subNumId ?? ''}
+                  onChange={(e) => {
+                    const numId = e.target.value ? Number(e.target.value) : null;
+                    setEditState((s) => s && ({ ...s, subNumId: numId }));
+                  }}
+                >
+                  <option value="">ללא</option>
+                  {editSubs.map((s) => (
+                    <option key={s.numericId} value={s.numericId ?? ''}>{s.icon} {s.label}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Description */}
+            <div style={{ marginBottom: '16px' }}>
+              <label style={LABEL_STYLE}>תיאור</label>
+              <textarea
+                style={{
+                  ...INPUT_BASE,
+                  resize: 'none', minHeight: '78px',
+                  direction: 'rtl', fontFamily: 'inherit', textAlign: 'right',
+                }}
+                value={editState.description}
+                onChange={(e) => setEditState((s) => s && ({ ...s, description: e.target.value }))}
+                placeholder="תיאור (אופציונלי)"
+              />
+            </div>
+
+            {/* Date */}
+            <div style={{ marginBottom: '28px' }}>
+              <label style={LABEL_STYLE}>תאריך</label>
+              <input
+                type="date"
+                style={{ ...INPUT_BASE, direction: 'ltr' }}
+                value={editState.date}
+                onChange={(e) => setEditState((s) => s && ({ ...s, date: e.target.value }))}
+              />
+            </div>
+
+            {/* Save */}
+            <button
+              style={{
+                width: '100%', border: 'none', borderRadius: '14px',
+                padding: '15px', fontSize: '16px', fontWeight: 700,
+                background: canSave ? '#2563eb' : '#e5e7eb',
+                color:      canSave ? 'white'   : '#9ca3af',
+                cursor:     canSave ? 'pointer'  : 'not-allowed',
+                marginBottom: '10px',
+              }}
+              onClick={handleSavePress}
+              disabled={!canSave}
+            >שמור שינויים</button>
+
+            {/* Cancel */}
+            <button
+              style={{ width: '100%', background: 'none', border: 'none', color: '#6b7280', fontSize: '15px', cursor: 'pointer', padding: '8px' }}
+              onClick={closeAll}
+            >ביטול</button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Group choice dialog ── */}
+      {showGroupChoice && pendingUpdate && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 310, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}
+          onClick={() => { setShowGroupChoice(false); setPendingUpdate(null); }}
+        >
+          <div
+            style={{ background: 'white', borderRadius: '18px', padding: '24px 20px 20px', width: '100%', maxWidth: '340px', boxSizing: 'border-box' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ fontSize: '16px', fontWeight: 700, color: '#1f2937', textAlign: 'center', marginBottom: '16px', lineHeight: '1.4' }}>
+              לעדכן עסקה אחת או את כל הקבוצה?
+            </div>
+
+            {amountOrDateChanged && (
+              <div style={{ background: '#fefce8', border: '1px solid #fde047', borderRadius: '10px', padding: '10px 13px', fontSize: '13px', color: '#92400e', marginBottom: '16px', lineHeight: '1.6', textAlign: 'right' }}>
+                סכום ותאריך יעודכנו רק בעסקה הנוכחית. קטגוריה, תת קטגוריה ותיאור יעודכנו בכל הקבוצה.
+              </div>
+            )}
+
+            {/* "Only this transaction" — safe default, filled */}
+            <button
+              style={{ width: '100%', border: 'none', borderRadius: '12px', padding: '13px', fontSize: '15px', fontWeight: 600, background: '#2563eb', color: 'white', cursor: 'pointer', marginBottom: '10px' }}
+              onClick={() => { onUpdate(pendingUpdate); closeAll(); }}
+            >רק העסקה הזו</button>
+
+            {/* "All group" — impactful, outlined */}
+            <button
+              style={{ width: '100%', border: '1.5px solid #2563eb', borderRadius: '12px', padding: '12px', fontSize: '15px', fontWeight: 600, background: 'white', color: '#2563eb', cursor: 'pointer', marginBottom: '10px' }}
+              onClick={() => {
+                const groupId = editingTx?.installmentGroupId ?? editingTx?.recurrenceGroupId;
+                if (!groupId) return;
+                onUpdateGroup(groupId, pendingUpdate, {
+                  categoryNumericId:    pendingUpdate.categoryNumericId,
+                  categoryLabel:        pendingUpdate.categoryLabel,
+                  subcategoryNumericId: pendingUpdate.subcategoryNumericId ?? null,
+                  subcategoryLabel:     pendingUpdate.subcategoryLabel ?? '',
+                  description:          pendingUpdate.description,
+                });
+                closeAll();
+              }}
+            >כל הקבוצה</button>
+
+            {/* Cancel — go back to edit sheet */}
+            <button
+              style={{ width: '100%', background: 'none', border: 'none', color: '#6b7280', fontSize: '14px', cursor: 'pointer', padding: '8px' }}
+              onClick={() => { setShowGroupChoice(false); setPendingUpdate(null); }}
+            >ביטול</button>
+          </div>
+        </div>
       )}
     </div>
   );

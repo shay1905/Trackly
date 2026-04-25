@@ -100,6 +100,90 @@ export function useTransactions() {
     setTransactions((prev) => prev.filter((t) => t.id !== id));
   }
 
+  async function updateTransaction(t: Transaction) {
+    const { error } = await supabase
+      .from('transactions')
+      .update({
+        amount: t.amount,
+        category_id: t.categoryNumericId ?? null,
+        category_label: t.categoryLabel,
+        subcategory_id: t.subcategoryNumericId ?? null,
+        subcategory_label: t.subcategoryLabel || null,
+        description: t.description,
+        date: t.date,
+      })
+      .eq('id', t.id);
+
+    if (error) {
+      console.error('Failed updating transaction:', error);
+      return;
+    }
+
+    setTransactions((prev) => prev.map((x) => x.id === t.id ? t : x));
+  }
+
+  async function updateTransactionGroup(
+    groupId: string,
+    current: Transaction,
+    groupSafe: {
+      categoryNumericId: number | null;
+      categoryLabel: string;
+      subcategoryNumericId: number | null;
+      subcategoryLabel: string;
+      description: string;
+    },
+  ) {
+    const { error: err1 } = await supabase
+      .from('transactions')
+      .update({
+        amount:           current.amount,
+        category_id:      current.categoryNumericId ?? null,
+        category_label:   current.categoryLabel,
+        subcategory_id:   current.subcategoryNumericId ?? null,
+        subcategory_label: current.subcategoryLabel || null,
+        description:      current.description,
+        date:             current.date,
+      })
+      .eq('id', current.id);
+
+    if (err1) { console.error('Failed updating current tx:', err1); return; }
+
+    const otherIds = transactions
+      .filter((t) =>
+        (t.installmentGroupId === groupId || t.recurrenceGroupId === groupId) &&
+        t.id !== current.id,
+      )
+      .map((t) => t.id);
+
+    if (otherIds.length > 0) {
+      const { error: err2 } = await supabase
+        .from('transactions')
+        .update({
+          category_id:       groupSafe.categoryNumericId ?? null,
+          category_label:    groupSafe.categoryLabel,
+          subcategory_id:    groupSafe.subcategoryNumericId ?? null,
+          subcategory_label: groupSafe.subcategoryLabel || null,
+          description:       groupSafe.description,
+        })
+        .in('id', otherIds);
+
+      if (err2) { console.error('Failed updating group txs:', err2); return; }
+    }
+
+    setTransactions((prev) => prev.map((t) => {
+      if (t.id === current.id) return current;
+      if (otherIds.includes(t.id)) return {
+        ...t,
+        categoryNumericId:    groupSafe.categoryNumericId,
+        categoryLabel:        groupSafe.categoryLabel,
+        subcategoryNumericId: groupSafe.subcategoryNumericId ?? null,
+        subcategoryLabel:     groupSafe.subcategoryLabel,
+        description:          groupSafe.description,
+      };
+      return t;
+    }));
+  }
+
   async function removeGroup(groupId: string) {
     const ids = transactions
       .filter(
@@ -135,5 +219,7 @@ export function useTransactions() {
     addTransactions,
     removeTransaction,
     removeGroup,
+    updateTransaction,
+    updateTransactionGroup,
   };
 }
