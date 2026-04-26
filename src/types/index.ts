@@ -2,6 +2,8 @@ export type TransactionType = 'expense' | 'income';
 
 export type RecurrenceType = 'one-time' | 'monthly' | 'weekly' | 'yearly';
 
+export type TransactionMode = 'one-time' | 'installments' | 'monthly-recurring';
+
 export interface Subcategory {
   id: string;
   numericId?: number;
@@ -34,6 +36,8 @@ export interface TransactionForm {
   recurrenceEndMode: RecurrenceEndMode;
   recurrenceOccurrences: number;
   recurrenceEndDate: string;
+  transactionMode: TransactionMode;
+  dayOfMonth: number;
 }
 
 export interface Transaction {
@@ -57,6 +61,24 @@ export interface Transaction {
   recurrenceIndex?: number;
   recurrenceTotal?: number;
   // numeric FK references
+  categoryNumericId: number | null;
+  subcategoryNumericId: number | null;
+  // virtual recurring item metadata
+  isVirtualRecurring?: boolean;
+  recurringRuleId?: string;
+}
+
+export interface RecurringRule {
+  id: string;
+  type: TransactionType;
+  amount: number;
+  categoryLabel: string;
+  subcategoryLabel: string;
+  description: string;
+  startDate: string;
+  dayOfMonth: number;
+  isActive: boolean;
+  createdDate: string;
   categoryNumericId: number | null;
   subcategoryNumericId: number | null;
 }

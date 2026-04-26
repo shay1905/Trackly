@@ -1,8 +1,9 @@
-import { RecurrenceType, TransactionType } from '../types';
+import { TransactionMode, TransactionType } from '../types';
 
-const RECURRENCE_OPTIONS: { value: RecurrenceType; label: string }[] = [
-  { value: 'one-time', label: 'חד פעמי' },
-  { value: 'monthly', label: 'חודשי' },
+const MODE_OPTIONS: { value: TransactionMode; label: string }[] = [
+  { value: 'one-time',          label: 'חד פעמית' },
+  { value: 'installments',      label: 'תשלומים' },
+  { value: 'monthly-recurring', label: 'חודשי קבוע' },
 ];
 
 interface Props {
@@ -12,26 +13,21 @@ interface Props {
   onDescriptionChange: (v: string) => void;
   date: string;
   onDateChange: (v: string) => void;
+  type: TransactionType;
+  transactionMode: TransactionMode;
+  onTransactionModeChange: (v: TransactionMode) => void;
   installments: number;
   onInstallmentsChange: (v: number) => void;
-  recurrence: RecurrenceType;
-  onRecurrenceChange: (v: RecurrenceType) => void;
-  recurrenceOccurrences: number;
-  onRecurrenceOccurrencesChange: (v: number) => void;
-  type: TransactionType;
 }
 
 export default function AdvancedSection({
   open, onToggle,
   description, onDescriptionChange,
   date, onDateChange,
-  installments, onInstallmentsChange,
-  recurrence, onRecurrenceChange,
-  recurrenceOccurrences, onRecurrenceOccurrencesChange,
   type,
+  transactionMode, onTransactionModeChange,
+  installments, onInstallmentsChange,
 }: Props) {
-  const isRecurring = recurrence !== 'one-time';
-
   return (
     <div className="advanced-section">
       <button className="advanced-toggle" onClick={onToggle} type="button">
@@ -42,7 +38,7 @@ export default function AdvancedSection({
       </button>
 
       <div className={`advanced-body${open ? ' open' : ''}`}>
-        {/* Description */}
+        {/* Description — always shown */}
         <div className="field-group">
           <label className="field-label">תיאור</label>
           <input
@@ -54,59 +50,18 @@ export default function AdvancedSection({
           />
         </div>
 
-        {/* Date */}
-        <div className="field-group">
-          <label className="field-label">תאריך עסקה</label>
-          <input
-            className="field-input"
-            type="date"
-            value={date}
-            onChange={(e) => onDateChange(e.target.value)}
-          />
-        </div>
-
-        {/* ── Expense-only fields ── */}
+        {/* Expense: 3-way mode chips + mode-specific fields */}
         {type === 'expense' && (
           <>
-            {/* Installments */}
             <div className="field-group">
-              <label className="field-label">תשלומים</label>
-              <div className="installments-row">
-                <button
-                  className="stepper-btn"
-                  type="button"
-                  onClick={() => onInstallmentsChange(Math.max(1, installments - 1))}
-                  disabled={installments <= 1}
-                >−</button>
-                <span className="stepper-value">{installments}</span>
-                <button
-                  className="stepper-btn"
-                  type="button"
-                  onClick={() => onInstallmentsChange(installments + 1)}
-                  disabled={isRecurring}
-                >+</button>
-              </div>
-              {installments > 1 && (
-                <p className="field-note-info">ייווצרו {installments} עסקאות חודשיות נפרדות</p>
-              )}
-              {isRecurring && installments > 1 && (
-                <p className="field-note">לא ניתן לשלב תשלומים עם חיוב קבוע</p>
-              )}
-            </div>
-
-            {/* Recurrence type */}
-            <div className="field-group">
-              <label className="field-label">חיוב קבוע</label>
+              <label className="field-label">סוג חיוב</label>
               <div className="recurrence-chips">
-                {RECURRENCE_OPTIONS.map((opt) => (
+                {MODE_OPTIONS.map((opt) => (
                   <button
                     key={opt.value}
                     type="button"
-                    className={`chip${recurrence === opt.value ? ` selected ${type}` : ''}${opt.value !== 'one-time' && installments > 1 ? ' disabled' : ''}`}
-                    onClick={() => {
-                      if (opt.value !== 'one-time' && installments > 1) return;
-                      onRecurrenceChange(opt.value);
-                    }}
+                    className={`chip${transactionMode === opt.value ? ` selected ${type}` : ''}`}
+                    onClick={() => onTransactionModeChange(opt.value)}
                   >
                     {opt.label}
                   </button>
@@ -114,28 +69,78 @@ export default function AdvancedSection({
               </div>
             </div>
 
-            {/* Occurrences — only shown when a recurring type is selected */}
-            {isRecurring && (
-              <div className="field-group recurrence-end-group">
-                <label className="field-label">סיום חיוב קבוע</label>
-                <div className="installments-row" style={{ marginTop: 10 }}>
-                  <button
-                    className="stepper-btn"
-                    type="button"
-                    onClick={() => onRecurrenceOccurrencesChange(Math.max(2, recurrenceOccurrences - 1))}
-                    disabled={recurrenceOccurrences <= 2}
-                  >−</button>
-                  <span className="stepper-value">{recurrenceOccurrences}</span>
-                  <button
-                    className="stepper-btn"
-                    type="button"
-                    onClick={() => onRecurrenceOccurrencesChange(recurrenceOccurrences + 1)}
-                  >+</button>
-                  <span className="recurrence-count-label">מופעים</span>
-                </div>
+            {transactionMode === 'one-time' && (
+              <div className="field-group">
+                <label className="field-label">תאריך עסקה</label>
+                <input
+                  className="field-input"
+                  type="date"
+                  value={date}
+                  onChange={(e) => onDateChange(e.target.value)}
+                />
               </div>
             )}
+
+            {transactionMode === 'installments' && (
+              <>
+                <div className="field-group">
+                  <label className="field-label">תאריך תשלום ראשון</label>
+                  <input
+                    className="field-input"
+                    type="date"
+                    value={date}
+                    onChange={(e) => onDateChange(e.target.value)}
+                  />
+                </div>
+                <div className="field-group">
+                  <label className="field-label">מספר תשלומים</label>
+                  <div className="installments-row">
+                    <button
+                      className="stepper-btn"
+                      type="button"
+                      onClick={() => onInstallmentsChange(Math.max(2, installments - 1))}
+                      disabled={installments <= 2}
+                    >−</button>
+                    <span className="stepper-value">{installments}</span>
+                    <button
+                      className="stepper-btn"
+                      type="button"
+                      onClick={() => onInstallmentsChange(installments + 1)}
+                    >+</button>
+                  </div>
+                  <p className="field-note-info">ייווצרו {installments} עסקאות חודשיות נפרדות</p>
+                </div>
+              </>
+            )}
+
+            {transactionMode === 'monthly-recurring' && (
+              <>
+                <div className="field-group">
+                  <label className="field-label">תאריך התחלה</label>
+                  <input
+                    className="field-input"
+                    type="date"
+                    value={date}
+                    onChange={(e) => onDateChange(e.target.value)}
+                  />
+                </div>
+                <p className="field-note-info" style={{ marginTop: '4px' }}>יחויב כל חודש עד שתבטל</p>
+              </>
+            )}
           </>
+        )}
+
+        {/* Income: just date */}
+        {type === 'income' && (
+          <div className="field-group">
+            <label className="field-label">תאריך עסקה</label>
+            <input
+              className="field-input"
+              type="date"
+              value={date}
+              onChange={(e) => onDateChange(e.target.value)}
+            />
+          </div>
         )}
       </div>
     </div>

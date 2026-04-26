@@ -1,10 +1,10 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import {
-  TransactionForm, TransactionType, RecurrenceType, Transaction, Category,
+  TransactionForm, TransactionType, TransactionMode, Transaction, Category,
 } from '../types';
 import { useTransactions } from '../hooks/useTransactions';
 import { useCategories } from '../hooks/useCategories';
-import { generateRecurringDates } from '../utils/recurrence';
+import { useRecurringRules, buildRecurringTransactionsForRule } from '../hooks/useRecurringRules';
 import CategoryGrid from './CategoryGrid';
 import SubcategoryRow from './SubcategoryRow';
 import AmountInput from './AmountInput';
@@ -25,11 +25,13 @@ const defaultForm = (): TransactionForm => ({
   subcategoryId: '',
   description: '',
   date: today(),
-  installments: 1,
+  installments: 2,
   recurrence: 'one-time',
   recurrenceEndMode: 'occurrences',
   recurrenceOccurrences: 2,
   recurrenceEndDate: '',
+  transactionMode: 'one-time',
+  dayOfMonth: new Date().getDate(),
 });
 
 function addMonths(dateStr: string, n: number): string {
@@ -89,7 +91,39 @@ export default function EntryScreen() {
     return () => document.removeEventListener('pointerdown', handler);
   }, [editMode]);
 
-  const { transactions, addTransactions, removeTransaction, removeGroup, updateTransaction, updateTransactionGroup } = useTransactions();
+  const { transactions, loaded: txLoaded, deletedRecurringMonthKeys, addTransactions, removeTransaction, removeGroup, updateTransaction, updateTransactionGroup, updateInstallmentDates } = useTransactions();
+  const { rules: recurringRules, loaded: rulesLoaded, addRecurringRule, updateRecurringRule, deactivateRecurringRule } = useRecurringRules();
+
+  const syncedRef = useRef(false);
+  useEffect(() => {
+    if (!txLoaded || !rulesLoaded) return;
+    if (syncedRef.current) return;
+    syncedRef.current = true;
+    if (recurringRules.length === 0) return;
+    const existingByRule = new Map<string, Set<string>>();
+    for (const t of transactions) {
+      if (t.recurrenceGroupId && t.recurrence === 'monthly' && !t.recurrenceTotal) {
+        const ym = t.date.slice(0, 7);
+        if (!existingByRule.has(t.recurrenceGroupId)) existingByRule.set(t.recurrenceGroupId, new Set());
+        existingByRule.get(t.recurrenceGroupId)!.add(ym);
+      }
+    }
+    // Treat soft-deleted months as existing so they are never regenerated
+    for (const key of deletedRecurringMonthKeys) {
+      const sep = key.indexOf('|');
+      const ruleId = key.slice(0, sep);
+      const ym = key.slice(sep + 1);
+      if (!existingByRule.has(ruleId)) existingByRule.set(ruleId, new Set());
+      existingByRule.get(ruleId)!.add(ym);
+    }
+    const missing: Transaction[] = [];
+    for (const rule of recurringRules) {
+      const existing = existingByRule.get(rule.id) ?? new Set<string>();
+      missing.push(...buildRecurringTransactionsForRule(rule, existing));
+    }
+    if (missing.length > 0) void addTransactions(missing);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [txLoaded, rulesLoaded, recurringRules, transactions, deletedRecurringMonthKeys]);
   const {
     categories: allCategories,
     loading: categoriesLoading,
@@ -132,8 +166,9 @@ export default function EntryScreen() {
       ...f, type,
       categoryId: defaultCat?.id ?? '',
       subcategoryId: defaultCat?.defaultSubcategoryId ?? '',
-      installments: 1,
+      installments: 2,
       recurrence: 'one-time',
+      transactionMode: 'one-time',
     }));
     setErrors({});
     setEditMode(false);
@@ -297,18 +332,17 @@ export default function EntryScreen() {
     setEditMode(false);
   }, [archiveCategory, archiveSubcategory, deleteTarget, selectedCategory, setDefaultSubcategory, form.categoryId, form.subcategoryId, form.type]);
 
-  const setInstallments = useCallback((installments: number) => {
+  const setTransactionMode = useCallback((mode: TransactionMode) => {
     setForm((f) => ({
-      ...f, installments,
-      recurrence: installments > 1 ? 'one-time' : f.recurrence,
+      ...f,
+      transactionMode: mode,
+      installments: mode === 'installments' ? Math.max(2, f.installments) : 2,
+      recurrence: 'one-time',
     }));
   }, []);
 
-  const setRecurrence = useCallback((recurrence: RecurrenceType) => {
-    setForm((f) => ({
-      ...f, recurrence,
-      installments: recurrence !== 'one-time' ? 1 : f.installments,
-    }));
+  const setInstallments = useCallback((installments: number) => {
+    setForm((f) => ({ ...f, installments }));
   }, []);
 
   const validate = (): boolean => {
@@ -321,12 +355,51 @@ export default function EntryScreen() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!validate()) return;
 
     const total      = parseFloat(form.amount);
     const selectedSub = selectedCategory?.subcategories.find((s) => s.id === form.subcategoryId);
     const subLabel   = selectedSub?.label ?? '';
+
+    const keepType       = form.type;
+    const keepCategoryId = form.categoryId;
+    const keepSubId      = selectedCategory?.defaultSubcategoryId ?? '';
+
+    const finish = () => {
+      setSaved(true);
+      setTimeout(() => {
+        setSaved(false);
+        setForm({
+          ...defaultForm(),
+          type: keepType,
+          categoryId: keepCategoryId,
+          subcategoryId: keepSubId,
+        });
+        setAdvancedOpen(false);
+        setErrors({});
+      }, 700);
+    };
+
+    if (form.type === 'expense' && form.transactionMode === 'monthly-recurring') {
+      const newRule = await addRecurringRule({
+        type: form.type,
+        amount: total,
+        categoryLabel: selectedCategory?.label ?? '',
+        subcategoryLabel: subLabel,
+        description: form.description,
+        startDate: form.date,
+        dayOfMonth: new Date(form.date + 'T00:00:00').getDate(),
+        categoryNumericId: selectedCategory?.numericId ?? null,
+        subcategoryNumericId: selectedSub?.numericId ?? null,
+      });
+      if (newRule) {
+        const txsToAdd = buildRecurringTransactionsForRule(newRule, new Set());
+        if (txsToAdd.length > 0) await addTransactions(txsToAdd);
+      }
+      finish();
+      return;
+    }
 
     type BaseFields = Omit<Transaction,
       'id' | 'amount' | 'date' |
@@ -340,8 +413,8 @@ export default function EntryScreen() {
       subcategoryId: form.subcategoryId || undefined,
       subcategoryLabel: subLabel,
       description: form.description,
-      installments: form.installments,
-      recurrence: form.recurrence,
+      installments: form.transactionMode === 'installments' ? form.installments : 1,
+      recurrence: 'one-time',
       categoryNumericId: selectedCategory?.numericId ?? null,
       subcategoryNumericId: selectedSub?.numericId ?? null,
     };
@@ -349,7 +422,7 @@ export default function EntryScreen() {
     const ts = Date.now();
     let newTransactions: Transaction[];
 
-    if (form.type === 'expense' && form.installments > 1) {
+    if (form.type === 'expense' && form.transactionMode === 'installments') {
       const amounts = splitInstallments(total, form.installments);
       const groupId = `grp-${ts}`;
       newTransactions = amounts.map((amt, i) => ({
@@ -361,43 +434,17 @@ export default function EntryScreen() {
         installmentIndex: i + 1,
         installmentTotal: form.installments,
       }));
-    } else if (form.type === 'expense' && form.recurrence !== 'one-time') {
-      const dates = generateRecurringDates(
-        form.date, form.recurrence,
-        form.recurrenceEndMode, form.recurrenceOccurrences, form.recurrenceEndDate,
-      );
-      const groupId = `rec-${ts}`;
-      newTransactions = dates.map((date, i) => ({
-        ...base, id: `tx-${ts}-${i}`, amount: total, date,
-        recurrenceGroupId: groupId, recurrenceIndex: i + 1, recurrenceTotal: dates.length,
-      }));
     } else {
       newTransactions = [{ ...base, id: `tx-${ts}`, amount: total, date: form.date }];
     }
 
     addTransactions(newTransactions);
-
-    const keepType       = form.type;
-    const keepCategoryId = form.categoryId;
-    const keepSubId      = selectedCategory?.defaultSubcategoryId ?? '';
-
-    setSaved(true);
-    setTimeout(() => {
-      setSaved(false);
-      setForm({
-        ...defaultForm(),
-        type: keepType,
-        categoryId: keepCategoryId,
-        subcategoryId: keepSubId,
-      });
-      setAdvancedOpen(false);
-      setErrors({});
-    }, 700);
+    finish();
   };
 
   const amountNum = parseFloat(form.amount) || 0;
   const perInstallment =
-    form.type === 'expense' && form.installments > 1 && amountNum > 0
+    form.type === 'expense' && form.transactionMode === 'installments' && amountNum > 0
       ? (amountNum / form.installments).toLocaleString('he-IL', { maximumFractionDigits: 2 })
       : null;
 
@@ -433,13 +480,17 @@ export default function EntryScreen() {
         <TransactionList
           transactions={transactions}
           categories={allCategories}
+          recurringRules={recurringRules}
           onDelete={removeTransaction}
           onDeleteGroup={removeGroup}
           onUpdate={updateTransaction}
           onUpdateGroup={updateTransactionGroup}
+          onUpdateRecurringRule={updateRecurringRule}
+          onDeactivateRecurringRule={deactivateRecurringRule}
+          onUpdateInstallmentDates={updateInstallmentDates}
         />
       ) : view === 'dashboard' ? (
-        <Dashboard transactions={transactions} categories={allCategories} />
+        <Dashboard transactions={transactions} categories={allCategories} recurringRules={recurringRules} />
       ) : (
         <>
           <div className="type-toggle">
@@ -476,13 +527,11 @@ export default function EntryScreen() {
             onDescriptionChange={(v) => setForm((f) => ({ ...f, description: v }))}
             date={form.date}
             onDateChange={(v) => setForm((f) => ({ ...f, date: v }))}
+            type={form.type}
+            transactionMode={form.transactionMode}
+            onTransactionModeChange={setTransactionMode}
             installments={form.installments}
             onInstallmentsChange={setInstallments}
-            recurrence={form.recurrence}
-            onRecurrenceChange={setRecurrence}
-            recurrenceOccurrences={form.recurrenceOccurrences}
-            onRecurrenceOccurrencesChange={(v) => setForm((f) => ({ ...f, recurrenceOccurrences: v }))}
-            type={form.type}
           />
 
           {/* ── Category sections ── */}

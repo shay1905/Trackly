@@ -1,9 +1,10 @@
 import { useState, useMemo } from 'react';
-import { Transaction, Category } from '../types';
+import { Transaction, Category, RecurringRule } from '../types';
 
 interface Props {
   transactions: Transaction[];
   categories: Category[];
+  recurringRules: RecurringRule[];
 }
 
 type TimeFilter = '1m' | '3m' | '6m' | '12m' | 'all';
@@ -259,8 +260,46 @@ function SavingsTrendChart({
   );
 }
 
+function getMonthsInRange(start: string, end: string): string[] {
+  const months: string[] = [];
+  let cur = start;
+  while (cur <= end) {
+    months.push(cur);
+    const [y, m] = cur.split('-').map(Number);
+    cur = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
+  }
+  return months;
+}
+
+function buildVirtualItems(rules: RecurringRule[], months: string[]): Transaction[] {
+  return rules.flatMap((r) =>
+    months
+      .filter((m) => r.startDate.slice(0, 7) <= m)
+      .map((m) => {
+        const [y, mo] = m.split('-').map(Number);
+        const daysInMonth = new Date(y, mo, 0).getDate();
+        const day = Math.min(r.dayOfMonth, daysInMonth);
+        return {
+          id: `virtual-${r.id}-${m}`,
+          type: r.type,
+          amount: r.amount,
+          categoryLabel: r.categoryLabel,
+          subcategoryLabel: r.subcategoryLabel,
+          description: r.description,
+          date: `${m}-${String(day).padStart(2, '0')}`,
+          installments: 1,
+          recurrence: 'monthly' as const,
+          categoryNumericId: r.categoryNumericId,
+          subcategoryNumericId: r.subcategoryNumericId,
+          isVirtualRecurring: true,
+          recurringRuleId: r.id,
+        };
+      })
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────
-export default function Dashboard({ transactions, categories }: Props) {
+export default function Dashboard({ transactions, categories, recurringRules }: Props) {
   const [activeTab,        setActiveTab]        = useState<TabType>('monthly');
   const [timeFilter,       setTimeFilter]       = useState<TimeFilter>('1m');
   const [specificMonth,    setSpecificMonth]    = useState<string>(currentMonthStr());
@@ -269,13 +308,26 @@ export default function Dashboard({ transactions, categories }: Props) {
   const [selectedTrendIdx, setSelectedTrendIdx] = useState<number | null>(null);
 
   const filtered = useMemo(() => {
+    const cm = currentMonthStr();
+    let base: Transaction[];
+    let virtualMonths: string[];
+
     if (timeFilter === '1m') {
-      return transactions.filter((t) => t.date.slice(0, 7) === specificMonth);
+      base = transactions.filter((t) => t.date.slice(0, 7) === specificMonth);
+      virtualMonths = [specificMonth];
+    } else if (timeFilter === 'all') {
+      base = [...transactions];
+      const earliest = [...transactions.map((t) => t.date.slice(0, 7)), ...recurringRules.map((r) => r.startDate.slice(0, 7))].sort()[0] ?? cm;
+      virtualMonths = getMonthsInRange(earliest, cm);
+    } else {
+      const start = getStartDate(timeFilter)!;
+      base = transactions.filter((t) => t.date >= start);
+      virtualMonths = getMonthsInRange(start.slice(0, 7), cm);
     }
-    const start = getStartDate(timeFilter);
-    if (!start) return transactions;
-    return transactions.filter((t) => t.date >= start);
-  }, [transactions, timeFilter, specificMonth]);
+
+    const virtual = buildVirtualItems(recurringRules, virtualMonths);
+    return [...base, ...virtual];
+  }, [transactions, recurringRules, timeFilter, specificMonth]);
 
   const income   = useMemo(() => filtered.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0), [filtered]);
   const expenses = useMemo(() => filtered.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0), [filtered]);

@@ -2,6 +2,16 @@ import { useEffect, useState } from 'react';
 import { Transaction } from '../types';
 import { supabase } from '../lib/supabase';
 
+function addMonths(dateStr: string, n: number): string {
+  const [y, m, day] = dateStr.split('-').map(Number);
+  const totalMonths = (m - 1) + n;
+  const targetYear = y + Math.floor(totalMonths / 12);
+  const targetMonth = totalMonths % 12;
+  const daysInMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
+  const finalDay = Math.min(day, daysInMonth);
+  return `${targetYear}-${String(targetMonth + 1).padStart(2, '0')}-${String(finalDay).padStart(2, '0')}`;
+}
+
 function mapRowToTransaction(row: any): Transaction {
   return {
     id: row.id,
@@ -50,25 +60,45 @@ function mapTransactionToRow(t: Transaction) {
 
 export function useTransactions() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [deletedRecurringMonthKeys, setDeletedRecurringMonthKeys] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     void loadTransactions();
   }, []);
 
   async function loadTransactions() {
-    const { data, error } = await supabase
-      .from('transactions')
-      .select('*')
-      .eq('is_deleted', false)
-      .order('date', { ascending: false })
-      .order('created_date', { ascending: false });
+    const [{ data, error }, { data: deleted }] = await Promise.all([
+      supabase
+        .from('transactions')
+        .select('*')
+        .eq('is_deleted', false)
+        .order('date', { ascending: false })
+        .order('created_date', { ascending: false }),
+      supabase
+        .from('transactions')
+        .select('recurrence_group_id, date')
+        .eq('is_deleted', true)
+        .not('recurrence_group_id', 'is', null)
+        .eq('recurrence', 'monthly')
+        .is('recurrence_total', null),
+    ]);
 
     if (error) {
       console.error('Failed loading transactions:', error);
       return;
     }
 
+    const keys = new Set<string>();
+    for (const row of deleted ?? []) {
+      if (row.recurrence_group_id && row.date) {
+        keys.add(`${row.recurrence_group_id}|${(row.date as string).slice(0, 7)}`);
+      }
+    }
+
     setTransactions((data ?? []).map(mapRowToTransaction));
+    setDeletedRecurringMonthKeys(keys);
+    setLoaded(true);
   }
 
   async function addTransactions(items: Transaction[]) {
@@ -208,12 +238,83 @@ export function useTransactions() {
     setTransactions((prev) => prev.filter((t) => !ids.includes(t.id)));
   }
 
+  async function updateInstallmentDates(
+    groupId: string,
+    current: Transaction,
+    groupSafe: {
+      categoryNumericId: number | null;
+      categoryLabel: string;
+      subcategoryNumericId: number | null;
+      subcategoryLabel: string;
+      description: string;
+    },
+  ) {
+    const newFirstDate = current.date;
+    const currentIdx = current.installmentIndex ?? 1;
+
+    const following = transactions.filter((t) =>
+      t.installmentGroupId === groupId &&
+      t.id !== current.id &&
+      (t.installmentIndex ?? 0) > currentIdx,
+    );
+
+    const { error: e1 } = await supabase
+      .from('transactions')
+      .update({
+        amount: current.amount,
+        category_id: current.categoryNumericId ?? null,
+        category_label: current.categoryLabel,
+        subcategory_id: current.subcategoryNumericId ?? null,
+        subcategory_label: current.subcategoryLabel || null,
+        description: current.description,
+        date: newFirstDate,
+      })
+      .eq('id', current.id);
+    if (e1) { console.error('Failed updating installment:', e1); return; }
+
+    const updatedFollowing: Transaction[] = [];
+    for (const t of following) {
+      const offset = (t.installmentIndex ?? 1) - currentIdx;
+      const newDate = addMonths(newFirstDate, offset);
+      const { error: e2 } = await supabase
+        .from('transactions')
+        .update({
+          category_id: groupSafe.categoryNumericId ?? null,
+          category_label: groupSafe.categoryLabel,
+          subcategory_id: groupSafe.subcategoryNumericId ?? null,
+          subcategory_label: groupSafe.subcategoryLabel || null,
+          description: groupSafe.description,
+          date: newDate,
+        })
+        .eq('id', t.id);
+      if (e2) { console.error('Failed updating following installment:', e2); return; }
+      updatedFollowing.push({
+        ...t,
+        categoryNumericId: groupSafe.categoryNumericId,
+        categoryLabel: groupSafe.categoryLabel,
+        subcategoryNumericId: groupSafe.subcategoryNumericId ?? null,
+        subcategoryLabel: groupSafe.subcategoryLabel,
+        description: groupSafe.description,
+        date: newDate,
+      });
+    }
+
+    setTransactions((prev) => prev.map((t) => {
+      if (t.id === current.id) return current;
+      const updated = updatedFollowing.find((u) => u.id === t.id);
+      return updated ?? t;
+    }));
+  }
+
   return {
     transactions,
+    loaded,
+    deletedRecurringMonthKeys,
     addTransactions,
     removeTransaction,
     removeGroup,
     updateTransaction,
     updateTransactionGroup,
+    updateInstallmentDates,
   };
 }
