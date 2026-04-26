@@ -231,6 +231,11 @@ export default function TransactionList({
   );
   const futureByMonth = useMemo(() => groupByMonth(futureTransactions), [futureTransactions]);
 
+  const futureRecurringRules = useMemo(() => {
+    const dayNum = parseInt(today.split('-')[2], 10);
+    return recurringRules.filter((r) => r.dayOfMonth < dayNum);
+  }, [recurringRules, today]);
+
   // ── Delete ──────────────────────────────────────────────────────────────
   const confirmDelete = () => {
     if (!pendingDelete) return;
@@ -507,48 +512,43 @@ export default function TransactionList({
             חיובים קבועים
           </div>
 
-          {recurringRules.length === 0 ? (
+          {futureRecurringRules.length === 0 ? (
             <div style={{ color: '#9ca3af', fontSize: '13px', textAlign: 'center', padding: '12px 0 20px' }}>
               אין חיובים קבועים פעילים
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', paddingBottom: '24px' }}>
-              {recurringRules.map((rule) => (
+            <div style={{ paddingBottom: '24px' }}>
+              {futureRecurringRules.map((rule) => (
                 <div
                   key={rule.id}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: '12px',
-                    background: 'white', borderRadius: '14px',
-                    padding: '13px 14px',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-                    cursor: 'pointer',
-                  }}
+                  className="tx-item expense"
+                  style={{ cursor: 'pointer' }}
                   onClick={() => openRuleEdit(rule)}
                 >
-                  <span style={{ fontSize: '24px', lineHeight: 1 }}>{getRuleIcon(rule, categories)}</span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: '14px', fontWeight: 600, color: '#1f2937' }}>
-                      {rule.description || rule.categoryLabel}
-                    </div>
-                    {rule.description && (
-                      <div style={{ fontSize: '12px', color: '#9ca3af' }}>
-                        {rule.categoryLabel}{rule.subcategoryLabel ? ` · ${rule.subcategoryLabel}` : ''}
-                      </div>
-                    )}
+                  <div className="tx-icon-wrap">
+                    <span className="tx-icon">{getRuleIcon(rule, categories)}</span>
                   </div>
-                  <div style={{ textAlign: 'left', direction: 'ltr' }}>
-                    <div style={{ fontSize: '15px', fontWeight: 700, color: '#ef4444' }}>
-                      ₪{rule.amount.toLocaleString('he-IL')}
+                  <div className="tx-info">
+                    <div className="tx-category">
+                      {rule.categoryLabel}
+                      {rule.subcategoryLabel && <span className="tx-sub"> · {rule.subcategoryLabel}</span>}
                     </div>
-                    <div style={{ fontSize: '11px', color: '#9ca3af' }}>
-                      בכל {rule.dayOfMonth} בחודש
+                    <div className="tx-badges">
+                      <span style={{ fontSize: '11px', background: '#ede9fe', color: '#7c3aed', borderRadius: '6px', padding: '2px 6px', fontWeight: 600 }}>חודשי</span>
+                    </div>
+                    {rule.description && <div className="tx-desc">{rule.description}</div>}
+                  </div>
+                  <div className="tx-right">
+                    <div className="tx-amount expense">
+                      −{rule.amount.toLocaleString('he-IL')} ₪
+                    </div>
+                    <div className="tx-actions">
+                      <button
+                        className="tx-delete"
+                        onClick={(e) => { e.stopPropagation(); setPendingDelete({ kind: 'recurring-rule', id: rule.id }); }}
+                      >✕</button>
                     </div>
                   </div>
-                  <button
-                    className="tx-delete"
-                    style={{ marginLeft: '4px', flexShrink: 0 }}
-                    onClick={(e) => { e.stopPropagation(); setPendingDelete({ kind: 'recurring-rule', id: rule.id }); }}
-                  >✕</button>
                 </div>
               ))}
             </div>
