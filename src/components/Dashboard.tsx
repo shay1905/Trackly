@@ -77,26 +77,35 @@ function buildCatRows(
   monthCount: number,
   categories: Category[],
 ): CatRow[] {
-  const catMap    = new Map<string, number>();
-  const subcatMap = new Map<string, Map<string, number>>();
+  const catKey    = (t: Transaction) => t.categoryNumericId != null ? `#${t.categoryNumericId}` : t.categoryLabel;
+  const subcatKey = (t: Transaction) => t.subcategoryNumericId != null ? `#${t.subcategoryNumericId}` : t.subcategoryLabel;
+
+  const catMeta    = new Map<string, { label: string; amount: number }>();
+  const subcatMeta = new Map<string, Map<string, { label: string; amount: number }>>();
+
   txList.filter((t) => t.type === type).forEach((t) => {
-    catMap.set(t.categoryLabel, (catMap.get(t.categoryLabel) ?? 0) + t.amount);
+    const ck = catKey(t);
+    if (!catMeta.has(ck)) catMeta.set(ck, { label: t.categoryLabel, amount: 0 });
+    catMeta.get(ck)!.amount += t.amount;
     if (t.subcategoryLabel) {
-      if (!subcatMap.has(t.categoryLabel)) subcatMap.set(t.categoryLabel, new Map());
-      const sm = subcatMap.get(t.categoryLabel)!;
-      sm.set(t.subcategoryLabel, (sm.get(t.subcategoryLabel) ?? 0) + t.amount);
+      const sk = subcatKey(t);
+      if (!subcatMeta.has(ck)) subcatMeta.set(ck, new Map());
+      const sm = subcatMeta.get(ck)!;
+      if (!sm.has(sk)) sm.set(sk, { label: t.subcategoryLabel, amount: 0 });
+      sm.get(sk)!.amount += t.amount;
     }
   });
-  return Array.from(catMap.entries())
-    .map(([label, catTotal]) => {
+
+  return Array.from(catMeta.entries())
+    .map(([ck, { label, amount: catTotal }]) => {
       const catObj  = categories.find((c) => c.label === label);
       const catIcon = catObj?.icon ?? '';
       return {
         label, icon: catIcon,
         avg: catTotal / monthCount,
         pct: total > 0 ? (catTotal / total) * 100 : 0,
-        subcats: Array.from((subcatMap.get(label) ?? new Map()).entries())
-          .map(([sl, sa]) => ({
+        subcats: Array.from((subcatMeta.get(ck) ?? new Map()).entries())
+          .map(([, { label: sl, amount: sa }]) => ({
             label: sl,
             icon: catObj?.subcategories.find((s) => s.label === sl)?.icon || catIcon,
             avg: sa / monthCount,
@@ -274,7 +283,7 @@ function getMonthsInRange(start: string, end: string): string[] {
 function buildVirtualItems(rules: RecurringRule[], months: string[]): Transaction[] {
   return rules.flatMap((r) =>
     months
-      .filter((m) => r.startDate.slice(0, 7) <= m)
+      .filter((m) => r.isActive && r.startDate.slice(0, 7) <= m)
       .map((m) => {
         const [y, mo] = m.split('-').map(Number);
         const daysInMonth = new Date(y, mo, 0).getDate();
@@ -309,19 +318,29 @@ export default function Dashboard({ transactions, categories, recurringRules }: 
 
   const filtered = useMemo(() => {
     const cm = currentMonthStr();
+    // Transactions created by the sync effect for recurring rules have
+    // recurrenceGroupId === rule.id. Exclude them here; buildVirtualItems
+    // is the single source of truth for monthly recurring charges.
+    const ruleIdSet = new Set(recurringRules.map((r) => r.id));
+    const isRuleTx = (t: Transaction) =>
+      t.recurrence === 'monthly' &&
+      !!t.recurrenceGroupId &&
+      !t.recurrenceTotal &&
+      ruleIdSet.has(t.recurrenceGroupId!);
+
     let base: Transaction[];
     let virtualMonths: string[];
 
     if (timeFilter === '1m') {
-      base = transactions.filter((t) => t.date.slice(0, 7) === specificMonth);
+      base = transactions.filter((t) => t.date.slice(0, 7) === specificMonth && !isRuleTx(t));
       virtualMonths = [specificMonth];
     } else if (timeFilter === 'all') {
-      base = [...transactions];
-      const earliest = [...transactions.map((t) => t.date.slice(0, 7)), ...recurringRules.map((r) => r.startDate.slice(0, 7))].sort()[0] ?? cm;
+      base = transactions.filter((t) => !isRuleTx(t));
+      const earliest = [...base.map((t) => t.date.slice(0, 7)), ...recurringRules.map((r) => r.startDate.slice(0, 7))].sort()[0] ?? cm;
       virtualMonths = getMonthsInRange(earliest, cm);
     } else {
       const start = getStartDate(timeFilter)!;
-      base = transactions.filter((t) => t.date >= start);
+      base = transactions.filter((t) => t.date >= start && !isRuleTx(t));
       virtualMonths = getMonthsInRange(start.slice(0, 7), cm);
     }
 
@@ -358,20 +377,26 @@ export default function Dashboard({ transactions, categories, recurringRules }: 
     [filtered, income, monthCount, categories],
   );
 
-  // Savings trend uses ALL transactions — unaffected by the time filter
+  // Savings trend uses ALL transactions + virtual recurring items — unaffected by the time filter
   const savingsTrend = useMemo(() => {
     const map = new Map<string, { inc: number; exp: number }>();
-    transactions.forEach((t) => {
+    const addItem = (t: { type: string; amount: number; date: string }) => {
       const mo = t.date.slice(0, 7);
       if (!map.has(mo)) map.set(mo, { inc: 0, exp: 0 });
       const e = map.get(mo)!;
       if (t.type === 'income') e.inc += t.amount; else e.exp += t.amount;
-    });
+    };
+    transactions.forEach(addItem);
+    if (recurringRules.length > 0) {
+      const cm = currentMonthStr();
+      const earliest = recurringRules.map((r) => r.startDate.slice(0, 7)).sort()[0];
+      buildVirtualItems(recurringRules, getMonthsInRange(earliest, cm)).forEach(addItem);
+    }
     return Array.from(map.entries())
       .filter(([, { inc }]) => inc > 0)
       .map(([month, { inc, exp }]) => ({ month, rate: ((inc - exp) / inc) * 100 }))
       .sort((a, b) => a.month.localeCompare(b.month));
-  }, [transactions]);
+  }, [transactions, recurringRules]);
 
   const today = currentMonthStr();
 
