@@ -215,6 +215,19 @@ export default function EntryScreen() {
 
   const selectedCategory = categories.find((c) => c.id === form.categoryId) ?? null;
 
+  // Set default category once categories load, if none is selected yet
+  useEffect(() => {
+    if (categoriesLoading) return;
+    setForm((f) => {
+      if (f.categoryId) return f;
+      const cats = getCategoriesForType(f.type);
+      const defaultCat = cats[0];
+      if (!defaultCat) return f;
+      return { ...f, categoryId: defaultCat.id, subcategoryId: defaultCat.defaultSubcategoryId ?? '' };
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [categoriesLoading, getCategoriesForType]);
+
   // Auto-open additional section when an additional category is explicitly chosen
   const isSelectedCatAdditional = form.type === 'expense' && selectedCategory?.isQuick === false;
   useEffect(() => {
