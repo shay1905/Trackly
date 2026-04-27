@@ -30,7 +30,6 @@ export default function AmountInput({ value, onChange, error, type }: Props) {
         placeholder="0"
         value={value}
         onChange={handleChange}
-        autoFocus
       />
       {error && <div className="field-error">{error}</div>}
     </div>
