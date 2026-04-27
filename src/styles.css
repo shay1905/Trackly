@@ -54,6 +54,7 @@ input  { font-family: inherit; }
   max-width: 480px;
   margin: 0 auto;
   min-height: 100dvh;
+  padding-top: 12px;
   padding-bottom: calc(130px + var(--safe-bottom));
   display: flex;
   flex-direction: column;

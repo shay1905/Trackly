@@ -548,9 +548,7 @@ export default function EntryScreen() {
 
   return (
     <div className="screen">
-      <header className="app-header">
-        <span className="app-title">Trackly</span>
-      </header>
+
 
       {view === 'history' ? (
         <TransactionList
