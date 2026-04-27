@@ -756,7 +756,7 @@ export default function EntryScreen() {
           disabled={saved}
           aria-label="הוסף דיווח"
         >
-          {saved ? '✓ נשמר' : 'הוסף'}
+          {saved ? '✓ נשמר' : '+'}
         </button>
       )}
 

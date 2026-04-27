@@ -681,7 +681,7 @@ input.field-input[type="date"]::-webkit-calendar-picker-indicator {
 /* ── FAB (pill) ──────────────────────────────────────────────────── */
 .fab {
   position: fixed;
-  bottom: calc(72px + var(--safe-bottom));
+  bottom: calc(120px + var(--safe-bottom));
   right: 20px;
   height: 52px;
   padding: 0 26px;
