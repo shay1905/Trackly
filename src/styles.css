@@ -64,6 +64,7 @@ input  { font-family: inherit; }
   padding: 20px 20px 12px;
   display: flex;
   align-items: center;
+  justify-content: flex-end;
 }
 .app-title {
   font-size: 20px;
