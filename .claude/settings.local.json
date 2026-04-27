@@ -16,7 +16,11 @@
       "Bash(python -c \"from PIL import Image; print\\('PIL OK'\\)\")",
       "Bash(node -e \"require\\('sharp'\\)\")",
       "Bash(node -e \"require\\('jimp'\\)\")",
-      "Bash(pip install *)"
+      "Bash(pip install *)",
+      "Bash(python --version)",
+      "Bash(python3 --version)",
+      "Bash(python -c \"from PIL import Image; print\\('Pillow OK'\\)\")",
+      "Bash(python *)"
     ]
   }
 }
