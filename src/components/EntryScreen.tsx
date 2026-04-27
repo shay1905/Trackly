@@ -120,6 +120,7 @@ export default function EntryScreen() {
 
   const categoryAreaRef = useRef<HTMLDivElement>(null);
   const carouselRef     = useRef<HTMLDivElement>(null);
+  const swipeStartRef   = useRef<{ x: number; y: number } | null>(null);
 
   // Exit edit mode when tapping outside the category area
   useEffect(() => {
@@ -546,8 +547,38 @@ export default function EntryScreen() {
     setView(NAV_CARDS[idx].view);
   };
 
+  const SWIPE_THRESHOLD = 50;
+  const INTERACTIVE_TAGS = new Set(['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON', 'A']);
+
+  const handleSwipeTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    let el = e.target as HTMLElement | null;
+    while (el) {
+      if (INTERACTIVE_TAGS.has(el.tagName)) return;
+      if (el.classList.contains('nav-carousel-wrap')) return;
+      el = el.parentElement;
+    }
+    swipeStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  };
+
+  const handleSwipeTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!swipeStartRef.current) return;
+    const dx = e.changedTouches[0].clientX - swipeStartRef.current.x;
+    const dy = e.changedTouches[0].clientY - swipeStartRef.current.y;
+    swipeStartRef.current = null;
+    if (Math.abs(dx) < SWIPE_THRESHOLD) return;
+    if (Math.abs(dy) >= Math.abs(dx)) return;
+    const currentIdx = NAV_CARDS.findIndex(c => c.view === view);
+    const nextIdx = currentIdx + (dx < 0 ? 1 : -1);
+    if (nextIdx < 0 || nextIdx >= NAV_CARDS.length) return;
+    scrollToCard(nextIdx);
+  };
+
   return (
-    <div className="screen">
+    <div
+      className="screen"
+      onTouchStart={handleSwipeTouchStart}
+      onTouchEnd={handleSwipeTouchEnd}
+    >
 
 
       {view === 'history' ? (
