@@ -63,6 +63,47 @@ interface MenuTarget   {
   isQuick?: boolean;
 }
 
+const NAV_CARDS = [
+  {
+    view: 'dashboard' as View,
+    label: 'דוחות',
+    tagline: 'סיכום וניתוח',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="12" width="4" height="9" rx="1"/>
+        <rect x="10" y="7" width="4" height="14" rx="1"/>
+        <rect x="17" y="3" width="4" height="18" rx="1"/>
+      </svg>
+    ),
+  },
+  {
+    view: 'entry' as View,
+    label: 'תיעוד',
+    tagline: 'תעד עסקה חדשה',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M11 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-5"/>
+        <path d="M17.5 2.5a2.12 2.12 0 0 1 3 3L12 14l-4 1 1-4 7.5-7.5z"/>
+      </svg>
+    ),
+  },
+  {
+    view: 'history' as View,
+    label: 'תנועות',
+    tagline: 'כל העסקאות',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <line x1="8" y1="6" x2="21" y2="6"/>
+        <line x1="8" y1="12" x2="21" y2="12"/>
+        <line x1="8" y1="18" x2="21" y2="18"/>
+        <circle cx="3" cy="6" r="0.5" fill="currentColor"/>
+        <circle cx="3" cy="12" r="0.5" fill="currentColor"/>
+        <circle cx="3" cy="18" r="0.5" fill="currentColor"/>
+      </svg>
+    ),
+  },
+];
+
 export default function EntryScreen() {
   const [view,            setView]            = useState<View>('entry');
   const [form,            setForm]            = useState<TransactionForm>(defaultForm());
@@ -78,6 +119,7 @@ export default function EntryScreen() {
   const [menuTarget,      setMenuTarget]      = useState<MenuTarget   | null>(null);
 
   const categoryAreaRef = useRef<HTMLDivElement>(null);
+  const carouselRef     = useRef<HTMLDivElement>(null);
 
   // Exit edit mode when tapping outside the category area
   useEffect(() => {
@@ -90,6 +132,36 @@ export default function EntryScreen() {
     document.addEventListener('pointerdown', handler);
     return () => document.removeEventListener('pointerdown', handler);
   }, [editMode]);
+
+  // Scroll carousel to תיעוד (index 1) on mount
+  useEffect(() => {
+    const el = carouselRef.current;
+    if (!el) return;
+    const card = el.children[1] as HTMLElement;
+    el.scrollLeft = card.offsetLeft - (el.clientWidth - card.offsetWidth) / 2;
+  }, []);
+
+  // Sync view state when carousel scroll settles
+  useEffect(() => {
+    const el = carouselRef.current;
+    if (!el) return;
+    let timer: ReturnType<typeof setTimeout>;
+    const onScroll = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        const mid = el.scrollLeft + el.clientWidth / 2;
+        let best = 0, bestDist = Infinity;
+        Array.from(el.children).forEach((child, i) => {
+          const c = child as HTMLElement;
+          const dist = Math.abs(c.offsetLeft + c.offsetWidth / 2 - mid);
+          if (dist < bestDist) { bestDist = dist; best = i; }
+        });
+        setView(NAV_CARDS[best].view);
+      }, 120);
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => { el.removeEventListener('scroll', onScroll); clearTimeout(timer); };
+  }, []);
 
   const { transactions, loaded: txLoaded, deletedRecurringMonthKeys, addTransactions, removeTransaction, removeGroup, updateTransaction, updateTransactionGroup, updateInstallmentDates } = useTransactions();
   const { rules: recurringRules, loaded: rulesLoaded, addRecurringRule, updateRecurringRule, deactivateRecurringRule } = useRecurringRules();
@@ -453,6 +525,14 @@ export default function EntryScreen() {
     ? (menuTarget.isQuick ? 'העבר לנוספים' : 'העבר לשכיחים')
     : undefined;
 
+  const scrollToCard = (idx: number) => {
+    const el = carouselRef.current;
+    if (!el) return;
+    const card = el.children[idx] as HTMLElement;
+    el.scrollTo({ left: card.offsetLeft - (el.clientWidth - card.offsetWidth) / 2, behavior: 'smooth' });
+    setView(NAV_CARDS[idx].view);
+  };
+
   return (
     <div className="screen">
       <header className="app-header">
@@ -725,46 +805,22 @@ export default function EntryScreen() {
         />
       )}
 
-      <nav className="bottom-nav">
-        <button
-          className={`bottom-nav-btn${view === 'dashboard' ? ' active' : ''}`}
-          onClick={() => setView('dashboard')}
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="12" width="4" height="9" rx="1"/>
-            <rect x="10" y="7" width="4" height="14" rx="1"/>
-            <rect x="17" y="3" width="4" height="18" rx="1"/>
-          </svg>
-          <span>דוחות</span>
-        </button>
-
-        <button
-          className={`bottom-nav-btn${view === 'history' ? ' active' : ''}`}
-          onClick={() => setView('history')}
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="8" y1="6" x2="21" y2="6"/>
-            <line x1="8" y1="12" x2="21" y2="12"/>
-            <line x1="8" y1="18" x2="21" y2="18"/>
-            <circle cx="3" cy="6" r="0.5" fill="currentColor"/>
-            <circle cx="3" cy="12" r="0.5" fill="currentColor"/>
-            <circle cx="3" cy="18" r="0.5" fill="currentColor"/>
-          </svg>
-          <span>תנועות</span>
-        </button>
-
-        <button
-          className={`bottom-nav-add${view === 'entry' ? ' active' : ''}`}
-          onClick={() => setView('entry')}
-          aria-label="הוסף עסקה"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M11 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-5"/>
-            <path d="M17.5 2.5a2.12 2.12 0 0 1 3 3L12 14l-4 1 1-4 7.5-7.5z"/>
-          </svg>
-          <span>תיעוד</span>
-        </button>
-      </nav>
+      <div className="nav-carousel-wrap">
+        <div className="nav-carousel" ref={carouselRef}>
+          {NAV_CARDS.map((card, idx) => (
+            <button
+              key={card.view}
+              className={`nav-card${view === card.view ? ' active' : ''}`}
+              onClick={() => scrollToCard(idx)}
+              type="button"
+            >
+              {card.icon}
+              <span className="nav-card-label">{card.label}</span>
+              <span className="nav-card-tagline">{card.tagline}</span>
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
