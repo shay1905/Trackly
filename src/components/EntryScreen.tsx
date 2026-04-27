@@ -457,23 +457,6 @@ export default function EntryScreen() {
     <div className="screen">
       <header className="app-header">
         <span className="app-title">Trackly</span>
-        <div className="header-nav">
-          <button
-            className={`nav-btn${view === 'entry' ? ' active' : ''}`}
-            onClick={() => setView('entry')}
-            title="הוספת עסקה"
-          >✚</button>
-          <button
-            className={`nav-btn${view === 'dashboard' ? ' active' : ''}`}
-            onClick={() => setView('dashboard')}
-            title="דשבורד"
-          >📊</button>
-          <button
-            className={`nav-btn${view === 'history' ? ' active' : ''}`}
-            onClick={() => setView('history')}
-            title="היסטוריה"
-          >☰</button>
-        </div>
       </header>
 
       {view === 'history' ? (
@@ -741,6 +724,47 @@ export default function EntryScreen() {
           onClose={() => setMenuTarget(null)}
         />
       )}
+
+      <nav className="bottom-nav">
+        <button
+          className={`bottom-nav-btn${view === 'dashboard' ? ' active' : ''}`}
+          onClick={() => setView('dashboard')}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="12" width="4" height="9" rx="1"/>
+            <rect x="10" y="7" width="4" height="14" rx="1"/>
+            <rect x="17" y="3" width="4" height="18" rx="1"/>
+          </svg>
+          <span>דוחות</span>
+        </button>
+
+        <button
+          className={`bottom-nav-btn${view === 'history' ? ' active' : ''}`}
+          onClick={() => setView('history')}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="8" y1="6" x2="21" y2="6"/>
+            <line x1="8" y1="12" x2="21" y2="12"/>
+            <line x1="8" y1="18" x2="21" y2="18"/>
+            <circle cx="3" cy="6" r="0.5" fill="currentColor"/>
+            <circle cx="3" cy="12" r="0.5" fill="currentColor"/>
+            <circle cx="3" cy="18" r="0.5" fill="currentColor"/>
+          </svg>
+          <span>תנועות</span>
+        </button>
+
+        <button
+          className={`bottom-nav-add${view === 'entry' ? ' active' : ''}`}
+          onClick={() => setView('entry')}
+          aria-label="הוסף עסקה"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M11 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-5"/>
+            <path d="M17.5 2.5a2.12 2.12 0 0 1 3 3L12 14l-4 1 1-4 7.5-7.5z"/>
+          </svg>
+          <span>תיעוד</span>
+        </button>
+      </nav>
     </div>
   );
 }
