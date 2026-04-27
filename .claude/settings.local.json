@@ -12,7 +12,11 @@
       "Bash(git push *)",
       "Bash(supabase --version)",
       "Bash(supabase status *)",
-      "Bash(npx vite *)"
+      "Bash(npx vite *)",
+      "Bash(python -c \"from PIL import Image; print\\('PIL OK'\\)\")",
+      "Bash(node -e \"require\\('sharp'\\)\")",
+      "Bash(node -e \"require\\('jimp'\\)\")",
+      "Bash(pip install *)"
     ]
   }
 }
