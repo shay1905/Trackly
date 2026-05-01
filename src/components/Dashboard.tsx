@@ -362,10 +362,25 @@ export default function Dashboard({ transactions, categories, recurringRules }: 
     return Math.max(months.size, 1);
   }, [timeFilter, filtered]);
 
+  // For multi-month averages, exclude the current (partial) month so averages
+  // are based only on complete calendar months.
+  const cm = currentMonthStr();
+  const filteredFull = useMemo(
+    () => timeFilter === '1m' ? filtered : filtered.filter((t) => t.date.slice(0, 7) < cm),
+    [filtered, timeFilter, cm],
+  );
+  const incomeFull   = useMemo(() => filteredFull.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0), [filteredFull]);
+  const expensesFull = useMemo(() => filteredFull.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0), [filteredFull]);
+  const fullMonthCount = useMemo(() => {
+    if (timeFilter === '1m') return 1;
+    const months = new Set(filteredFull.map((t) => t.date.slice(0, 7)));
+    return Math.max(months.size, 1);
+  }, [timeFilter, filteredFull]);
+
   const isMultiMonth    = monthCount > 1;
-  const displayIncome   = isMultiMonth ? income   / monthCount : income;
-  const displayExpenses = isMultiMonth ? expenses / monthCount : expenses;
-  const displayBalance  = isMultiMonth ? balance  / monthCount : balance;
+  const displayIncome   = isMultiMonth ? incomeFull   / fullMonthCount : income;
+  const displayExpenses = isMultiMonth ? expensesFull / fullMonthCount : expenses;
+  const displayBalance  = isMultiMonth ? (incomeFull - expensesFull) / fullMonthCount : balance;
 
   const catExpenses = useMemo(
     () => buildCatRows(filtered, 'expense', expenses, monthCount, categories),

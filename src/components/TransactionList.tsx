@@ -231,10 +231,8 @@ export default function TransactionList({
   );
   const futureByMonth = useMemo(() => groupByMonth(futureTransactions), [futureTransactions]);
 
-  const futureRecurringRules = useMemo(() => {
-    const dayNum = parseInt(today.split('-')[2], 10);
-    return recurringRules.filter((r) => r.dayOfMonth < dayNum);
-  }, [recurringRules, today]);
+  // Show all active recurring rules — they persist until explicitly cancelled.
+  const futureRecurringRules = useMemo(() => recurringRules, [recurringRules]);
 
   // ── Delete ──────────────────────────────────────────────────────────────
   const confirmDelete = () => {
