@@ -1,10 +1,11 @@
 import { useState, useMemo } from 'react';
-import { Transaction, Category, RecurringRule } from '../types';
+import { Transaction, Category, RecurringRule, NavFilters } from '../types';
 
 interface Props {
   transactions: Transaction[];
   categories: Category[];
   recurringRules: RecurringRule[];
+  onNavigate?: (filters: NavFilters) => void;
 }
 
 type TimeFilter = '1m' | '3m' | '6m' | '12m' | 'all';
@@ -67,7 +68,8 @@ type CatRow = {
   icon: string;
   avg: number;
   pct: number;
-  subcats: { label: string; icon: string; avg: number; pct: number }[];
+  numericId: number | null;
+  subcats: { label: string; icon: string; avg: number; pct: number; numericId: number | null }[];
 };
 
 function buildCatRows(
@@ -81,7 +83,7 @@ function buildCatRows(
   const subcatKey = (t: Transaction) => t.subcategoryNumericId != null ? `#${t.subcategoryNumericId}` : t.subcategoryLabel;
 
   const catMeta    = new Map<string, { label: string; amount: number }>();
-  const subcatMeta = new Map<string, Map<string, { label: string; amount: number }>>();
+  const subcatMeta = new Map<string, Map<string, { label: string; amount: number; numericId: number | null }>>();
 
   txList.filter((t) => t.type === type).forEach((t) => {
     const ck = catKey(t);
@@ -91,7 +93,7 @@ function buildCatRows(
       const sk = subcatKey(t);
       if (!subcatMeta.has(ck)) subcatMeta.set(ck, new Map());
       const sm = subcatMeta.get(ck)!;
-      if (!sm.has(sk)) sm.set(sk, { label: t.subcategoryLabel, amount: 0 });
+      if (!sm.has(sk)) sm.set(sk, { label: t.subcategoryLabel, amount: 0, numericId: t.subcategoryNumericId ?? null });
       sm.get(sk)!.amount += t.amount;
     }
   });
@@ -104,12 +106,14 @@ function buildCatRows(
         label, icon: catIcon,
         avg: catTotal / monthCount,
         pct: total > 0 ? (catTotal / total) * 100 : 0,
+        numericId: catObj?.numericId ?? null,
         subcats: Array.from((subcatMeta.get(ck) ?? new Map()).entries())
-          .map(([, { label: sl, amount: sa }]) => ({
+          .map(([, { label: sl, amount: sa, numericId: subNumericId }]) => ({
             label: sl,
             icon: catObj?.subcategories.find((s) => s.label === sl)?.icon || catIcon,
             avg: sa / monthCount,
             pct: catTotal > 0 ? (sa / catTotal) * 100 : 0,
+            numericId: subNumericId,
           }))
           .sort((a, b) => b.avg - a.avg),
       };
@@ -117,21 +121,28 @@ function buildCatRows(
     .sort((a, b) => b.avg - a.avg);
 }
 
+const NAV_ARROW: React.CSSProperties = {
+  background: 'none', border: 'none', cursor: 'pointer',
+  color: '#d1d5db', fontSize: '18px', padding: '0', lineHeight: 1, flexShrink: 0,
+};
+
 // ── Reusable category list renderer ─────────────────────────────────────
 function CategoryRows({
   rows,
   expandedCat,
   onToggle,
   subcatAmtColor,
+  onNavigate,
 }: {
   rows: CatRow[];
   expandedCat: string | null;
   onToggle: (label: string) => void;
   subcatAmtColor: string;
+  onNavigate?: (catNumericId: number | null, subNumericId: number | null) => void;
 }) {
   return (
     <div style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #f3f4f6' }}>
-      {rows.map(({ label, icon, avg, pct, subcats }, idx) => (
+      {rows.map(({ label, icon, avg, pct, subcats, numericId }, idx) => (
         <div key={label}>
           <div
             onClick={() => subcats.length > 0 && onToggle(label)}
@@ -154,9 +165,16 @@ function CategoryRows({
             </span>
             <span style={{ fontSize: '14px', fontWeight: 600, color: '#1f2937' }}>{fmt(avg)}</span>
             <span style={{ fontSize: '12px', color: '#9ca3af', minWidth: '40px', textAlign: 'left' }}>{fmtPct(pct)}</span>
+            {onNavigate && (
+              <button
+                type="button"
+                style={NAV_ARROW}
+                onClick={(e) => { e.stopPropagation(); onNavigate(numericId, null); }}
+              >‹</button>
+            )}
           </div>
 
-          {expandedCat === label && subcats.map(({ label: sl, icon: si, avg: sa, pct: sp }) => (
+          {expandedCat === label && subcats.map(({ label: sl, icon: si, avg: sa, pct: sp, numericId: subNumericId }) => (
             <div key={sl} style={{
               display: 'flex', alignItems: 'center', gap: '10px',
               paddingTop: '10px', paddingBottom: '10px',
@@ -168,6 +186,13 @@ function CategoryRows({
               <span style={{ flex: 1, fontSize: '13px', color: '#6b7280' }}>{sl}</span>
               <span style={{ fontSize: '13px', fontWeight: 500, color: subcatAmtColor }}>{fmt(sa)}</span>
               <span style={{ fontSize: '11px', color: '#9ca3af', minWidth: '40px', textAlign: 'left' }}>{fmtPct(sp)}</span>
+              {onNavigate && (
+                <button
+                  type="button"
+                  style={{ ...NAV_ARROW, fontSize: '16px' }}
+                  onClick={() => onNavigate(numericId, subNumericId)}
+                >‹</button>
+              )}
             </div>
           ))}
         </div>
@@ -308,7 +333,7 @@ function buildVirtualItems(rules: RecurringRule[], months: string[]): Transactio
 }
 
 // ── Main component ────────────────────────────────────────────────────────
-export default function Dashboard({ transactions, categories, recurringRules }: Props) {
+export default function Dashboard({ transactions, categories, recurringRules, onNavigate }: Props) {
   const [activeTab,        setActiveTab]        = useState<TabType>('monthly');
   const [timeFilter,       setTimeFilter]       = useState<TimeFilter>('1m');
   const [specificMonth,    setSpecificMonth]    = useState<string>(currentMonthStr());
@@ -407,13 +432,25 @@ export default function Dashboard({ transactions, categories, recurringRules }: 
       const earliest = recurringRules.map((r) => r.startDate.slice(0, 7)).sort()[0];
       buildVirtualItems(recurringRules, getMonthsInRange(earliest, cm)).forEach(addItem);
     }
+    const cm = currentMonthStr();
     return Array.from(map.entries())
-      .filter(([, { inc }]) => inc > 0)
+      .filter(([month, { inc }]) => inc > 0 && month < cm)
       .map(([month, { inc, exp }]) => ({ month, rate: ((inc - exp) / inc) * 100 }))
       .sort((a, b) => a.month.localeCompare(b.month));
   }, [transactions, recurringRules]);
 
   const today = currentMonthStr();
+
+  const handleCatNavigate = (catNumericId: number | null, subNumericId: number | null) => {
+    if (!onNavigate) return;
+    onNavigate({
+      catNumericId,
+      subNumericId,
+      dateFilter: timeFilter === '1m' ? 'this-month' : 'range',
+      selectedMonth: specificMonth,
+      rangeStart: timeFilter === '1m' ? null : getStartDate(timeFilter),
+    });
+  };
 
   const TABS: { key: TabType; label: string }[] = [
     { key: 'monthly', label: 'דוחות חודשיים' },
@@ -518,6 +555,7 @@ export default function Dashboard({ transactions, categories, recurringRules }: 
                     expandedCat={expandedExpCat}
                     onToggle={(l) => setExpandedExpCat((p) => (p === l ? null : l))}
                     subcatAmtColor="#ef4444"
+                    onNavigate={onNavigate ? handleCatNavigate : undefined}
                   />
                 </div>
               )}
@@ -530,6 +568,7 @@ export default function Dashboard({ transactions, categories, recurringRules }: 
                     expandedCat={expandedIncCat}
                     onToggle={(l) => setExpandedIncCat((p) => (p === l ? null : l))}
                     subcatAmtColor="#16a34a"
+                    onNavigate={onNavigate ? handleCatNavigate : undefined}
                   />
                 </div>
               )}

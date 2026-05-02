@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import {
-  TransactionForm, TransactionType, TransactionMode, Transaction, Category,
+  TransactionForm, TransactionType, TransactionMode, Transaction, Category, NavFilters,
 } from '../types';
 import { useTransactions } from '../hooks/useTransactions';
 import { useCategories } from '../hooks/useCategories';
@@ -106,6 +106,7 @@ const NAV_CARDS = [
 
 export default function EntryScreen() {
   const [view,            setView]            = useState<View>('entry');
+  const [navFilters,      setNavFilters]      = useState<NavFilters | null>(null);
   const [form,            setForm]            = useState<TransactionForm>(defaultForm());
   const [advancedOpen,    setAdvancedOpen]    = useState(false);
   const [errors,          setErrors]          = useState<Partial<Record<keyof TransactionForm, string>>>({});
@@ -547,6 +548,11 @@ export default function EntryScreen() {
     setView(NAV_CARDS[idx].view);
   };
 
+  const handleNavigateToTransactions = (filters: NavFilters) => {
+    setNavFilters(filters);
+    scrollToCard(2);
+  };
+
   const SWIPE_THRESHOLD = 50;
   const INTERACTIVE_TAGS = new Set(['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON', 'A']);
 
@@ -586,6 +592,7 @@ export default function EntryScreen() {
           transactions={transactions}
           categories={allCategories}
           recurringRules={recurringRules}
+          navFilters={navFilters}
           onDelete={removeTransaction}
           onDeleteGroup={removeGroup}
           onUpdate={updateTransaction}
@@ -595,7 +602,7 @@ export default function EntryScreen() {
           onUpdateInstallmentDates={updateInstallmentDates}
         />
       ) : view === 'dashboard' ? (
-        <Dashboard transactions={transactions} categories={allCategories} recurringRules={recurringRules} />
+        <Dashboard transactions={transactions} categories={allCategories} recurringRules={recurringRules} onNavigate={handleNavigateToTransactions} />
       ) : (
         <>
           <div className="type-toggle">
