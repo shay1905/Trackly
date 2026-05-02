@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Category, Transaction, RecurringRule } from '../types';
+import { Category, Transaction, RecurringRule, NavFilters } from '../types';
 import ConfirmDialog from './ConfirmDialog';
 import { useLongPress } from '../hooks/useLongPress';
 
@@ -46,7 +46,7 @@ function fmtMonthHe(ym: string): string {
   return `${HE_MONTHS[m - 1]} ${y}`;
 }
 
-type DateFilter = 'this-month' | 'until-today' | 'future';
+type DateFilter = 'this-month' | 'until-today' | 'future' | 'range';
 
 const FILTERS: { value: DateFilter; label: string }[] = [
   { value: 'this-month',  label: 'החודש' },
@@ -134,6 +134,7 @@ interface Props {
   onUpdateRecurringRule: (rule: RecurringRule) => void;
   onDeactivateRecurringRule: (id: string) => void;
   onUpdateInstallmentDates: (groupId: string, current: Transaction, groupSafe: GroupSafeUpdate) => void;
+  navFilters?: NavFilters | null;
 }
 
 const LABEL_STYLE = {
@@ -153,14 +154,16 @@ export default function TransactionList({
   onDelete, onDeleteGroup, onUpdate, onUpdateGroup,
   onUpdateRecurringRule, onDeactivateRecurringRule,
   onUpdateInstallmentDates,
+  navFilters,
 }: Props) {
-  const [filter,          setFilter]          = useState<DateFilter>('this-month');
-  const [selectedMonth,   setSelectedMonth]   = useState(currentMonthStr);
+  const [filter,          setFilter]          = useState<DateFilter>(() => navFilters?.dateFilter ?? 'this-month');
+  const [selectedMonth,   setSelectedMonth]   = useState(() => navFilters?.selectedMonth ?? currentMonthStr());
+  const [rangeStart,      setRangeStart]      = useState<string | null>(() => navFilters?.rangeStart ?? null);
   const [pendingDelete,   setPendingDelete]   = useState<PendingDelete | null>(null);
   const [pendingRuleCancel, setPendingRuleCancel] = useState<string | null>(null);
   const [search,          setSearch]          = useState('');
-  const [selectedCatId,   setSelectedCatId]   = useState<number | null>(null);
-  const [selectedSubId,   setSelectedSubId]   = useState<number | null>(null);
+  const [selectedCatId,   setSelectedCatId]   = useState<number | null>(() => navFilters?.catNumericId ?? null);
+  const [selectedSubId,   setSelectedSubId]   = useState<number | null>(() => navFilters?.subNumericId ?? null);
   const [editingTx,       setEditingTx]       = useState<Transaction | null>(null);
   const [editState,       setEditState]       = useState<EditState | null>(null);
   const [saveAttempted,   setSaveAttempted]   = useState(false);
@@ -174,6 +177,23 @@ export default function TransactionList({
 
   const today = todayStr();
   const thisMonth = currentMonthStr();
+
+  const hasActiveFilters =
+    filter !== 'this-month' ||
+    selectedMonth !== thisMonth ||
+    rangeStart !== null ||
+    selectedCatId !== null ||
+    selectedSubId !== null ||
+    search !== '';
+
+  const clearFilters = () => {
+    setFilter('this-month');
+    setSelectedMonth(thisMonth);
+    setRangeStart(null);
+    setSelectedCatId(null);
+    setSelectedSubId(null);
+    setSearch('');
+  };
 
   const uniqueCats = useMemo(() => {
     const seen = new Set<number>();
@@ -209,6 +229,7 @@ export default function TransactionList({
         case 'this-month':  return t.date.startsWith(selectedMonth);
         case 'until-today': return t.date <= today;
         case 'future':      return t.date > today;
+        case 'range':       return rangeStart === null || t.date >= rangeStart;
       }
     })
     .filter((t) => !search || t.description.toLowerCase().includes(search.toLowerCase()))
@@ -847,12 +868,25 @@ export default function TransactionList({
           <button
             key={f.value}
             className={`history-filter-btn${filter === f.value ? ' active' : ''}`}
-            onClick={() => setFilter(f.value)}
+            onClick={() => { setFilter(f.value); setRangeStart(null); }}
             type="button"
           >
             {f.label}
           </button>
         ))}
+        {hasActiveFilters && (
+          <button
+            type="button"
+            onClick={clearFilters}
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              fontSize: '12px', color: '#9ca3af', padding: '4px 6px',
+              marginRight: 'auto', whiteSpace: 'nowrap',
+            }}
+          >
+            ✕ איפוס
+          </button>
+        )}
       </div>
 
       {filter === 'this-month' && (
