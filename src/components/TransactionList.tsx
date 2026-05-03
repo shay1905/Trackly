@@ -46,10 +46,11 @@ function fmtMonthHe(ym: string): string {
   return `${HE_MONTHS[m - 1]} ${y}`;
 }
 
-type DateFilter = 'this-month' | 'until-today' | 'future' | 'range';
+type DateFilter = 'this-month' | 'recent' | 'until-today' | 'future' | 'range';
 
 const FILTERS: { value: DateFilter; label: string }[] = [
   { value: 'this-month',  label: 'החודש' },
+  { value: 'recent',      label: 'נוספו לאחרונה' },
   { value: 'until-today', label: 'עד היום' },
   { value: 'future',      label: 'עתידיות' },
 ];
@@ -230,6 +231,7 @@ export default function TransactionList({
     .filter((t) => {
       switch (filter) {
         case 'this-month':  return t.date.startsWith(selectedMonth);
+        case 'recent':      return t.createdDate === today;
         case 'until-today': return t.date <= today;
         case 'future':      return t.date > today;
         case 'range':
@@ -246,16 +248,6 @@ export default function TransactionList({
     );
 
   const groups = groupByDate(filtered);
-
-  const isCurrentMonthView = filter === 'this-month' && selectedMonth === thisMonth;
-  const recentlyAdded = isCurrentMonthView
-    ? transactions
-        .filter((t) => t.createdDate === today)
-        .filter((t) => !search || t.description.toLowerCase().includes(search.toLowerCase()))
-        .filter((t) => selectedCatId == null || t.categoryNumericId === selectedCatId)
-        .filter((t) => selectedSubId == null || t.subcategoryNumericId === selectedSubId)
-        .sort((a, b) => b.date.localeCompare(a.date))
-    : [];
 
   // Future installments — exclude rule-generated recurring transactions
   const futureTransactions = useMemo(
@@ -1045,17 +1037,6 @@ export default function TransactionList({
               type="button"
             >{s.icon} {s.label}</button>
           ))}
-        </div>
-      )}
-
-      {/* ── Recently added ── */}
-      {recentlyAdded.length > 0 && (
-        <div style={{ padding: '4px 16px 0' }}>
-          <div style={{ fontSize: '12px', fontWeight: 600, color: '#9ca3af', marginBottom: '6px', textAlign: 'right', letterSpacing: '0.3px' }}>
-            נוספו לאחרונה
-          </div>
-          {recentlyAdded.map((t) => renderTxCard(t))}
-          <div style={{ height: '1px', background: '#f3f4f6', margin: '10px 0 4px' }} />
         </div>
       )}
 
