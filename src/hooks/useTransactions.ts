@@ -31,6 +31,7 @@ function mapRowToTransaction(row: any): Transaction {
     recurrenceTotal: row.recurrence_total ?? undefined,
     categoryNumericId: row.category_id ?? null,
     subcategoryNumericId: row.subcategory_id ?? null,
+    createdDate: row.created_date ?? undefined,
   };
 }
 

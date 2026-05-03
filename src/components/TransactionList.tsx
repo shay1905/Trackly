@@ -247,6 +247,16 @@ export default function TransactionList({
 
   const groups = groupByDate(filtered);
 
+  const isCurrentMonthView = filter === 'this-month' && selectedMonth === thisMonth;
+  const recentlyAdded = isCurrentMonthView
+    ? transactions
+        .filter((t) => t.createdDate === today)
+        .filter((t) => !search || t.description.toLowerCase().includes(search.toLowerCase()))
+        .filter((t) => selectedCatId == null || t.categoryNumericId === selectedCatId)
+        .filter((t) => selectedSubId == null || t.subcategoryNumericId === selectedSubId)
+        .sort((a, b) => b.date.localeCompare(a.date))
+    : [];
+
   // Future installments — exclude rule-generated recurring transactions
   const futureTransactions = useMemo(
     () => transactions
@@ -435,6 +445,89 @@ export default function TransactionList({
       pendingUpdate.date   !== editingTx.date
     )
   );
+
+  // ── Shared transaction card ──────────────────────────────────────────────
+  function renderTxCard(t: Transaction) {
+    const ruleTx      = isRecurringRuleTx(t);
+    const recLabel    = RECURRENCE_LABELS[t.recurrence];
+    const isInstallment = t.installmentTotal && t.installmentTotal > 1;
+    const isRecurring   = t.recurrenceTotal  && t.recurrenceTotal  > 1;
+    const groupId       = ruleTx ? undefined : (t.installmentGroupId ?? t.recurrenceGroupId);
+
+    const handleDelete = () => {
+      if (ruleTx) {
+        const txMonth = t.date.slice(0, 7);
+        if (txMonth < thisMonth) {
+          setPendingDelete({ kind: 'single', id: t.id });
+        } else {
+          setPendingDelete({ kind: 'recurring-current', id: t.id, ruleId: t.recurrenceGroupId });
+        }
+      } else {
+        setPendingDelete({ kind: 'single', id: t.id });
+      }
+    };
+
+    return (
+      <div
+        key={t.id}
+        className={`tx-item ${t.type}${lp.pressingId === t.id ? ' tx-pressing' : ''}`}
+        onPointerDown={(e) => {
+          if ((e.target as HTMLElement).closest('button')) return;
+          lp.start(t.id, () => openEdit(t));
+        }}
+        onPointerUp={() => lp.cancel()}
+        onPointerCancel={() => lp.cancel()}
+        onPointerLeave={() => lp.cancel()}
+        onContextMenu={(e) => e.preventDefault()}
+      >
+        <div className="tx-icon-wrap">
+          <span className="tx-icon">{getDisplayIcon(t, categories)}</span>
+        </div>
+        <div className="tx-info">
+          <div className="tx-category">
+            {t.categoryLabel}
+            {t.subcategoryLabel && <span className="tx-sub"> · {t.subcategoryLabel}</span>}
+          </div>
+          <div className="tx-badges">
+            {ruleTx && (
+              <span style={{ fontSize: '11px', background: '#ede9fe', color: '#7c3aed', borderRadius: '6px', padding: '2px 6px', fontWeight: 600 }}>
+                חודשי
+              </span>
+            )}
+            {isInstallment && (
+              <span className="tx-badge installment-badge">
+                {t.installmentIndex}/{t.installmentTotal}
+              </span>
+            )}
+            {isRecurring && recLabel && (
+              <span className="tx-badge recurrence-badge">
+                {recLabel} {t.recurrenceIndex}/{t.recurrenceTotal}
+              </span>
+            )}
+            {!isInstallment && !isRecurring && !ruleTx && recLabel && (
+              <span className="tx-badge">{recLabel}</span>
+            )}
+          </div>
+          {t.description && <div className="tx-desc">{t.description}</div>}
+        </div>
+        <div className="tx-right">
+          <div className={`tx-amount ${t.type}`}>
+            {t.type === 'income' ? '+' : '−'}
+            {t.amount.toLocaleString('he-IL')} ₪
+          </div>
+          <div className="tx-actions">
+            {groupId && (
+              <button
+                className="tx-delete-group"
+                onClick={() => setPendingDelete({ kind: 'group', id: groupId, transaction: t })}
+              >מחק מהמופע הזה והלאה</button>
+            )}
+            <button className="tx-delete" onClick={handleDelete}>✕</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // ── Future view ──────────────────────────────────────────────────────────
   if (filter === 'future') {
@@ -955,6 +1048,17 @@ export default function TransactionList({
         </div>
       )}
 
+      {/* ── Recently added ── */}
+      {recentlyAdded.length > 0 && (
+        <div style={{ padding: '4px 16px 0' }}>
+          <div style={{ fontSize: '12px', fontWeight: 600, color: '#9ca3af', marginBottom: '6px', textAlign: 'right', letterSpacing: '0.3px' }}>
+            נוספו לאחרונה
+          </div>
+          {recentlyAdded.map((t) => renderTxCard(t))}
+          <div style={{ height: '1px', background: '#f3f4f6', margin: '10px 0 4px' }} />
+        </div>
+      )}
+
       {/* ── Transaction list ── */}
       {filtered.length === 0 ? (
         <div className="history-empty">
@@ -966,94 +1070,7 @@ export default function TransactionList({
           {groups.map(([date, items]) => (
             <div key={date} className="history-group">
               <div className="history-date-label">{formatDate(date)}</div>
-              {items.map((t) => {
-                const ruleTx      = isRecurringRuleTx(t);
-                const recLabel    = RECURRENCE_LABELS[t.recurrence];
-                const isInstallment = t.installmentTotal && t.installmentTotal > 1;
-                const isRecurring   = t.recurrenceTotal  && t.recurrenceTotal  > 1;
-                const groupId       = ruleTx ? undefined : (t.installmentGroupId ?? t.recurrenceGroupId);
-
-                const handleDelete = () => {
-                  if (ruleTx) {
-                    const txMonth = t.date.slice(0, 7);
-                    if (txMonth < thisMonth) {
-                      // Past generated recurring tx: delete only this row, no rule question
-                      setPendingDelete({ kind: 'single', id: t.id });
-                    } else {
-                      // Current month: delete tx + offer future cancellation
-                      setPendingDelete({ kind: 'recurring-current', id: t.id, ruleId: t.recurrenceGroupId });
-                    }
-                  } else {
-                    setPendingDelete({ kind: 'single', id: t.id });
-                  }
-                };
-
-                return (
-                  <div
-                    key={t.id}
-                    className={`tx-item ${t.type}${lp.pressingId === t.id ? ' tx-pressing' : ''}`}
-                    onPointerDown={(e) => {
-                      if ((e.target as HTMLElement).closest('button')) return;
-                      lp.start(t.id, () => openEdit(t));
-                    }}
-                    onPointerUp={() => lp.cancel()}
-                    onPointerCancel={() => lp.cancel()}
-                    onPointerLeave={() => lp.cancel()}
-                    onContextMenu={(e) => e.preventDefault()}
-                  >
-                    <div className="tx-icon-wrap">
-                      <span className="tx-icon">{getDisplayIcon(t, categories)}</span>
-                    </div>
-                    <div className="tx-info">
-                      <div className="tx-category">
-                        {t.categoryLabel}
-                        {t.subcategoryLabel && (
-                          <span className="tx-sub"> · {t.subcategoryLabel}</span>
-                        )}
-                      </div>
-                      <div className="tx-badges">
-                        {ruleTx && (
-                          <span style={{ fontSize: '11px', background: '#ede9fe', color: '#7c3aed', borderRadius: '6px', padding: '2px 6px', fontWeight: 600 }}>
-                            חודשי
-                          </span>
-                        )}
-                        {isInstallment && (
-                          <span className="tx-badge installment-badge">
-                            {t.installmentIndex}/{t.installmentTotal}
-                          </span>
-                        )}
-                        {isRecurring && recLabel && (
-                          <span className="tx-badge recurrence-badge">
-                            {recLabel} {t.recurrenceIndex}/{t.recurrenceTotal}
-                          </span>
-                        )}
-                        {!isInstallment && !isRecurring && !ruleTx && recLabel && (
-                          <span className="tx-badge">{recLabel}</span>
-                        )}
-                      </div>
-                      {t.description && <div className="tx-desc">{t.description}</div>}
-                    </div>
-                    <div className="tx-right">
-                      <div className={`tx-amount ${t.type}`}>
-                        {t.type === 'income' ? '+' : '−'}
-                        {t.amount.toLocaleString('he-IL')} ₪
-                      </div>
-                      <div className="tx-actions">
-                        {groupId && (
-                          <button
-                            className="tx-delete-group"
-                            onClick={() => setPendingDelete({ kind: 'group', id: groupId, transaction: t })}
-                          >מחק מהמופע הזה והלאה</button>
-                        )}
-                        <button
-                          className="tx-delete"
-                          onClick={handleDelete}
-                        >✕</button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+              {items.map((t) => renderTxCard(t))}
             </div>
           ))}
         </div>

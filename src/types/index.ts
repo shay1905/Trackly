@@ -63,6 +63,7 @@ export interface Transaction {
   // numeric FK references
   categoryNumericId: number | null;
   subcategoryNumericId: number | null;
+  createdDate?: string;
   // virtual recurring item metadata
   isVirtualRecurring?: boolean;
   recurringRuleId?: string;
