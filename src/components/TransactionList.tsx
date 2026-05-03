@@ -135,6 +135,7 @@ interface Props {
   onDeactivateRecurringRule: (id: string) => void;
   onUpdateInstallmentDates: (groupId: string, current: Transaction, groupSafe: GroupSafeUpdate) => void;
   navFilters?: NavFilters | null;
+  onClearNavFilters?: () => void;
 }
 
 const LABEL_STYLE = {
@@ -155,6 +156,7 @@ export default function TransactionList({
   onUpdateRecurringRule, onDeactivateRecurringRule,
   onUpdateInstallmentDates,
   navFilters,
+  onClearNavFilters,
 }: Props) {
   const [filter,          setFilter]          = useState<DateFilter>(() => navFilters?.dateFilter ?? 'this-month');
   const [selectedMonth,   setSelectedMonth]   = useState(() => navFilters?.selectedMonth ?? currentMonthStr());
@@ -193,6 +195,7 @@ export default function TransactionList({
     setSelectedCatId(null);
     setSelectedSubId(null);
     setSearch('');
+    onClearNavFilters?.();
   };
 
   const uniqueCats = useMemo(() => {
@@ -229,7 +232,8 @@ export default function TransactionList({
         case 'this-month':  return t.date.startsWith(selectedMonth);
         case 'until-today': return t.date <= today;
         case 'future':      return t.date > today;
-        case 'range':       return rangeStart === null || t.date >= rangeStart;
+        case 'range':
+          return (rangeStart === null || t.date >= rangeStart) && t.date.slice(0, 7) < thisMonth;
       }
     })
     .filter((t) => !search || t.description.toLowerCase().includes(search.toLowerCase()))

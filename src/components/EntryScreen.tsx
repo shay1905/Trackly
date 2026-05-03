@@ -135,6 +135,11 @@ export default function EntryScreen() {
     return () => document.removeEventListener('pointerdown', handler);
   }, [editMode]);
 
+  // Clear nav filters whenever the user leaves the Transactions screen
+  useEffect(() => {
+    if (view !== 'history') setNavFilters(null);
+  }, [view]);
+
   // Scroll carousel to תיעוד (index 1) on mount
   useEffect(() => {
     const el = carouselRef.current;
@@ -600,6 +605,7 @@ export default function EntryScreen() {
           onUpdateRecurringRule={updateRecurringRule}
           onDeactivateRecurringRule={deactivateRecurringRule}
           onUpdateInstallmentDates={updateInstallmentDates}
+          onClearNavFilters={() => setNavFilters(null)}
         />
       ) : view === 'dashboard' ? (
         <Dashboard transactions={transactions} categories={allCategories} recurringRules={recurringRules} onNavigate={handleNavigateToTransactions} />

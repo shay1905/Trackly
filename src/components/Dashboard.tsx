@@ -44,9 +44,12 @@ function fmtMonthHe(ym: string): string {
 function getStartDate(filter: TimeFilter): string | null {
   if (filter === 'all') return null;
   const now = new Date();
-  const monthsBack = filter === '3m' ? 2 : filter === '6m' ? 5 : 11;
-  const d = new Date(now.getFullYear(), now.getMonth() - monthsBack, 1);
-  return d.toISOString().split('T')[0];
+  const monthsBack = filter === '3m' ? 3 : filter === '6m' ? 6 : 12;
+  // Integer arithmetic avoids toISOString() UTC-shift (e.g. Israel UTC+3 would turn Feb 1 → Jan 31)
+  const totalMonths = now.getFullYear() * 12 + now.getMonth() - monthsBack;
+  const year = Math.floor(totalMonths / 12);
+  const month = totalMonths % 12; // 0-indexed
+  return `${year}-${String(month + 1).padStart(2, '0')}-01`;
 }
 
 function fmt(n: number): string {
@@ -408,13 +411,13 @@ export default function Dashboard({ transactions, categories, recurringRules, on
   const displayBalance  = isMultiMonth ? (incomeFull - expensesFull) / fullMonthCount : balance;
 
   const catExpenses = useMemo(
-    () => buildCatRows(filtered, 'expense', expenses, monthCount, categories),
-    [filtered, expenses, monthCount, categories],
+    () => buildCatRows(filteredFull, 'expense', expensesFull, fullMonthCount, categories),
+    [filteredFull, expensesFull, fullMonthCount, categories],
   );
 
   const catIncome = useMemo(
-    () => buildCatRows(filtered, 'income', income, monthCount, categories),
-    [filtered, income, monthCount, categories],
+    () => buildCatRows(filteredFull, 'income', incomeFull, fullMonthCount, categories),
+    [filteredFull, incomeFull, fullMonthCount, categories],
   );
 
   // Savings trend uses ALL transactions + virtual recurring items — unaffected by the time filter
