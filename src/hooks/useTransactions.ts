@@ -114,7 +114,12 @@ export function useTransactions() {
       return;
     }
 
-    setTransactions((prev) => [...items, ...prev]);
+    const today = new Date().toISOString().split('T')[0];
+    const itemsWithCreatedDate = items.map((item) => ({
+      ...item,
+      createdDate: item.createdDate ?? today,
+    }));
+    setTransactions((prev) => [...itemsWithCreatedDate, ...prev]);
   }
 
   async function removeTransaction(id: string) {
