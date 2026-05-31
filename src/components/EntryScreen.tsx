@@ -119,9 +119,11 @@ export default function EntryScreen() {
   const [editTarget,      setEditTarget]      = useState<EditTarget   | null>(null);
   const [menuTarget,      setMenuTarget]      = useState<MenuTarget   | null>(null);
 
-  const categoryAreaRef = useRef<HTMLDivElement>(null);
-  const carouselRef     = useRef<HTMLDivElement>(null);
-  const swipeStartRef   = useRef<{ x: number; y: number } | null>(null);
+  const categoryAreaRef          = useRef<HTMLDivElement>(null);
+  const carouselRef              = useRef<HTMLDivElement>(null);
+  const swipeStartRef            = useRef<{ x: number; y: number } | null>(null);
+  const programmaticScrollRef    = useRef(false);
+  const programmaticScrollTimer  = useRef<ReturnType<typeof setTimeout>>();
 
   // Exit edit mode when tapping outside the category area
   useEffect(() => {
@@ -148,12 +150,13 @@ export default function EntryScreen() {
     el.scrollLeft = card.offsetLeft - (el.clientWidth - card.offsetWidth) / 2;
   }, []);
 
-  // Sync view state when carousel scroll settles
+  // Sync view state when carousel scroll settles (skip during programmatic scrolls)
   useEffect(() => {
     const el = carouselRef.current;
     if (!el) return;
     let timer: ReturnType<typeof setTimeout>;
     const onScroll = () => {
+      if (programmaticScrollRef.current) return;
       clearTimeout(timer);
       timer = setTimeout(() => {
         const mid = el.scrollLeft + el.clientWidth / 2;
@@ -549,6 +552,9 @@ export default function EntryScreen() {
     const el = carouselRef.current;
     if (!el) return;
     const card = el.children[idx] as HTMLElement;
+    programmaticScrollRef.current = true;
+    clearTimeout(programmaticScrollTimer.current);
+    programmaticScrollTimer.current = setTimeout(() => { programmaticScrollRef.current = false; }, 600);
     el.scrollTo({ left: card.offsetLeft - (el.clientWidth - card.offsetWidth) / 2, behavior: 'smooth' });
     setView(NAV_CARDS[idx].view);
   };

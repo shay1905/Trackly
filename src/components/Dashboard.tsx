@@ -103,13 +103,14 @@ function buildCatRows(
 
   return Array.from(catMeta.entries())
     .map(([ck, { label, amount: catTotal }]) => {
-      const catObj  = categories.find((c) => c.label === label);
+      const numericId = ck.startsWith('#') ? Number(ck.slice(1)) : null;
+      const catObj  = categories.find((c) => numericId != null ? c.numericId === numericId : c.label === label);
       const catIcon = catObj?.icon ?? '';
       return {
         label, icon: catIcon,
         avg: catTotal / monthCount,
         pct: total > 0 ? (catTotal / total) * 100 : 0,
-        numericId: catObj?.numericId ?? null,
+        numericId: numericId ?? catObj?.numericId ?? null,
         subcats: Array.from((subcatMeta.get(ck) ?? new Map()).entries())
           .map(([, { label: sl, amount: sa, numericId: subNumericId }]) => ({
             label: sl,
@@ -122,6 +123,18 @@ function buildCatRows(
       };
     })
     .sort((a, b) => b.avg - a.avg);
+}
+
+const HOUSING_LABELS = new Set([
+  'דיור', 'שכירות', 'חשמל', 'מים', 'גז', 'אינטרנט',
+  'ארנונה', 'תחזוקת בית', 'אחזקת בית', 'ביטוח בית',
+  'ועד בית', 'כלל הוצאות הבית', 'הוצאות דיור',
+  'שכ"ד', 'שכד',
+]);
+
+function withSectionPct(rows: CatRow[]): CatRow[] {
+  const sectionAvg = rows.reduce((s, r) => s + r.avg, 0);
+  return rows.map((r) => ({ ...r, pct: sectionAvg > 0 ? (r.avg / sectionAvg) * 100 : 0 }));
 }
 
 const NAV_ARROW: React.CSSProperties = {
@@ -415,6 +428,15 @@ export default function Dashboard({ transactions, categories, recurringRules, on
     [filteredFull, expensesFull, fullMonthCount, categories],
   );
 
+  const housingExpenses = useMemo(
+    () => withSectionPct(catExpenses.filter((r) => HOUSING_LABELS.has(r.label))),
+    [catExpenses],
+  );
+  const personalExpenses = useMemo(
+    () => withSectionPct(catExpenses.filter((r) => !HOUSING_LABELS.has(r.label))),
+    [catExpenses],
+  );
+
   const catIncome = useMemo(
     () => buildCatRows(filteredFull, 'income', incomeFull, fullMonthCount, categories),
     [filteredFull, incomeFull, fullMonthCount, categories],
@@ -550,17 +572,38 @@ export default function Dashboard({ transactions, categories, recurringRules, on
                 </div>
               </div>
 
-              {catExpenses.length > 0 && (
-                <div className="dash-section">
-                  <h3 className="dash-section-title">הוצאות לפי קטגוריה</h3>
-                  <CategoryRows
-                    rows={catExpenses}
-                    expandedCat={expandedExpCat}
-                    onToggle={(l) => setExpandedExpCat((p) => (p === l ? null : l))}
-                    subcatAmtColor="#ef4444"
-                    onNavigate={onNavigate ? handleCatNavigate : undefined}
-                  />
-                </div>
+              {(housingExpenses.length > 0 || personalExpenses.length > 0) && (
+                <>
+                  {housingExpenses.length > 0 && (
+                    <div className="dash-section">
+                      <h3 className="dash-section-title">הוצאות דיור לפי קטגוריה</h3>
+                      <CategoryRows
+                        rows={housingExpenses}
+                        expandedCat={expandedExpCat}
+                        onToggle={(l) => setExpandedExpCat((p) => (p === l ? null : l))}
+                        subcatAmtColor="#ef4444"
+                        onNavigate={onNavigate ? handleCatNavigate : undefined}
+                      />
+                    </div>
+                  )}
+                  {personalExpenses.length > 0 && (
+                    <div className="dash-section">
+                      <div style={{ marginBottom: '10px', direction: 'rtl' }}>
+                        <h3 className="dash-section-title" style={{ margin: 0 }}>הוצאות אישיות לפי קטגוריה</h3>
+                        <span style={{ fontSize: '11px', color: '#9ca3af', fontWeight: 500, marginTop: '3px', display: 'block' }}>
+                          סה"כ {fmt(personalExpenses.reduce((s, r) => s + r.avg, 0))}
+                        </span>
+                      </div>
+                      <CategoryRows
+                        rows={personalExpenses}
+                        expandedCat={expandedExpCat}
+                        onToggle={(l) => setExpandedExpCat((p) => (p === l ? null : l))}
+                        subcatAmtColor="#ef4444"
+                        onNavigate={onNavigate ? handleCatNavigate : undefined}
+                      />
+                    </div>
+                  )}
+                </>
               )}
 
               {catIncome.length > 0 && (
