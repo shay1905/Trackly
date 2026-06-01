@@ -86,6 +86,7 @@ export interface RecurringRule {
 
 export interface NavFilters {
   catNumericId: number | null;
+  catLabel: string | null;
   subNumericId: number | null;
   dateFilter: 'this-month' | 'range';
   selectedMonth: string;

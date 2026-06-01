@@ -165,8 +165,9 @@ export default function TransactionList({
   const [pendingDelete,   setPendingDelete]   = useState<PendingDelete | null>(null);
   const [pendingRuleCancel, setPendingRuleCancel] = useState<string | null>(null);
   const [search,          setSearch]          = useState('');
-  const [selectedCatId,   setSelectedCatId]   = useState<number | null>(() => navFilters?.catNumericId ?? null);
-  const [selectedSubId,   setSelectedSubId]   = useState<number | null>(() => navFilters?.subNumericId ?? null);
+  const [selectedCatId,    setSelectedCatId]    = useState<number | null>(() => navFilters?.catNumericId ?? null);
+  const [selectedCatLabel, setSelectedCatLabel] = useState<string | null>(() => navFilters?.catLabel ?? null);
+  const [selectedSubId,    setSelectedSubId]    = useState<number | null>(() => navFilters?.subNumericId ?? null);
   const [editingTx,       setEditingTx]       = useState<Transaction | null>(null);
   const [editState,       setEditState]       = useState<EditState | null>(null);
   const [saveAttempted,   setSaveAttempted]   = useState(false);
@@ -186,6 +187,7 @@ export default function TransactionList({
     selectedMonth !== thisMonth ||
     rangeStart !== null ||
     selectedCatId !== null ||
+    selectedCatLabel !== null ||
     selectedSubId !== null ||
     search !== '';
 
@@ -194,6 +196,7 @@ export default function TransactionList({
     setSelectedMonth(thisMonth);
     setRangeStart(null);
     setSelectedCatId(null);
+    setSelectedCatLabel(null);
     setSelectedSubId(null);
     setSearch('');
     onClearNavFilters?.();
@@ -239,7 +242,11 @@ export default function TransactionList({
       }
     })
     .filter((t) => !search || t.description.toLowerCase().includes(search.toLowerCase()))
-    .filter((t) => selectedCatId == null || t.categoryNumericId === selectedCatId)
+    .filter((t) => {
+      if (selectedCatId != null) return t.categoryNumericId === selectedCatId || (t.categoryNumericId == null && t.categoryLabel === selectedCatLabel);
+      if (selectedCatLabel != null) return t.categoryLabel === selectedCatLabel;
+      return true;
+    })
     .filter((t) => selectedSubId == null || t.subcategoryNumericId === selectedSubId)
     .sort((a, b) =>
       filter === 'future'
@@ -1012,15 +1019,15 @@ export default function TransactionList({
       {uniqueCats.length > 0 && (
         <div className="cat-chip-row">
           <button
-            className={`cat-chip${selectedCatId == null ? ' active' : ''}`}
-            onClick={() => { setSelectedCatId(null); setSelectedSubId(null); }}
+            className={`cat-chip${selectedCatId == null && selectedCatLabel == null ? ' active' : ''}`}
+            onClick={() => { setSelectedCatId(null); setSelectedCatLabel(null); setSelectedSubId(null); }}
             type="button"
           >הכל</button>
           {uniqueCats.map((c) => (
             <button
               key={c.numericId}
               className={`cat-chip${selectedCatId === c.numericId ? ' active' : ''}`}
-              onClick={() => { setSelectedCatId(c.numericId); setSelectedSubId(null); }}
+              onClick={() => { setSelectedCatId(c.numericId); setSelectedCatLabel(null); setSelectedSubId(null); }}
               type="button"
             >{c.icon} {c.label}</button>
           ))}

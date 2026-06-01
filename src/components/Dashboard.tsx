@@ -82,28 +82,37 @@ function buildCatRows(
   monthCount: number,
   categories: Category[],
 ): CatRow[] {
-  const catKey    = (t: Transaction) => t.categoryNumericId != null ? `#${t.categoryNumericId}` : t.categoryLabel;
-  const subcatKey = (t: Transaction) => t.subcategoryNumericId != null ? `#${t.subcategoryNumericId}` : t.subcategoryLabel;
+  // Group strictly by categoryLabel so that the same category name is always
+  // one row, even when different transactions recorded different numericIds for
+  // the same logical category (common when data spans multiple months).
+  type CatEntry = { label: string; numericId: number | null; amount: number };
+  type SubEntry = { label: string; numericId: number | null; amount: number };
 
-  const catMeta    = new Map<string, { label: string; amount: number }>();
-  const subcatMeta = new Map<string, Map<string, { label: string; amount: number; numericId: number | null }>>();
+  const catMeta    = new Map<string, CatEntry>();
+  const subcatMeta = new Map<string, Map<string, SubEntry>>();
 
   txList.filter((t) => t.type === type).forEach((t) => {
-    const ck = catKey(t);
-    if (!catMeta.has(ck)) catMeta.set(ck, { label: t.categoryLabel, amount: 0 });
+    const ck = t.categoryLabel;
+    if (!catMeta.has(ck)) {
+      // Resolve numericId: use the transaction's value, fall back to categories list.
+      const numericId = t.categoryNumericId
+        ?? categories.find((c) => c.label === t.categoryLabel)?.numericId
+        ?? null;
+      catMeta.set(ck, { label: t.categoryLabel, numericId, amount: 0 });
+    }
     catMeta.get(ck)!.amount += t.amount;
+
     if (t.subcategoryLabel) {
-      const sk = subcatKey(t);
+      const sk = t.subcategoryLabel;
       if (!subcatMeta.has(ck)) subcatMeta.set(ck, new Map());
       const sm = subcatMeta.get(ck)!;
-      if (!sm.has(sk)) sm.set(sk, { label: t.subcategoryLabel, amount: 0, numericId: t.subcategoryNumericId ?? null });
+      if (!sm.has(sk)) sm.set(sk, { label: t.subcategoryLabel, numericId: t.subcategoryNumericId ?? null, amount: 0 });
       sm.get(sk)!.amount += t.amount;
     }
   });
 
-  return Array.from(catMeta.entries())
-    .map(([ck, { label, amount: catTotal }]) => {
-      const numericId = ck.startsWith('#') ? Number(ck.slice(1)) : null;
+  return Array.from(catMeta.values())
+    .map(({ label, numericId, amount: catTotal }) => {
       const catObj  = categories.find((c) => numericId != null ? c.numericId === numericId : c.label === label);
       const catIcon = catObj?.icon ?? '';
       return {
@@ -111,8 +120,8 @@ function buildCatRows(
         avg: catTotal / monthCount,
         pct: total > 0 ? (catTotal / total) * 100 : 0,
         numericId: numericId ?? catObj?.numericId ?? null,
-        subcats: Array.from((subcatMeta.get(ck) ?? new Map()).entries())
-          .map(([, { label: sl, amount: sa, numericId: subNumericId }]) => ({
+        subcats: Array.from((subcatMeta.get(label) ?? new Map()).values())
+          .map(({ label: sl, numericId: subNumericId, amount: sa }) => ({
             label: sl,
             icon: catObj?.subcategories.find((s) => s.label === sl)?.icon || catIcon,
             avg: sa / monthCount,
@@ -137,11 +146,6 @@ function withSectionPct(rows: CatRow[]): CatRow[] {
   return rows.map((r) => ({ ...r, pct: sectionAvg > 0 ? (r.avg / sectionAvg) * 100 : 0 }));
 }
 
-const NAV_ARROW: React.CSSProperties = {
-  background: 'none', border: 'none', cursor: 'pointer',
-  color: '#d1d5db', fontSize: '18px', padding: '0', lineHeight: 1, flexShrink: 0,
-};
-
 // ── Reusable category list renderer ─────────────────────────────────────
 function CategoryRows({
   rows,
@@ -154,18 +158,18 @@ function CategoryRows({
   expandedCat: string | null;
   onToggle: (label: string) => void;
   subcatAmtColor: string;
-  onNavigate?: (catNumericId: number | null, subNumericId: number | null) => void;
+  onNavigate?: (catNumericId: number | null, catLabel: string, subNumericId: number | null) => void;
 }) {
   return (
     <div style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #f3f4f6' }}>
       {rows.map(({ label, icon, avg, pct, subcats, numericId }, idx) => (
         <div key={label}>
           <div
-            onClick={() => subcats.length > 0 && onToggle(label)}
+            onClick={() => onNavigate ? onNavigate(numericId, label, null) : (subcats.length > 0 && onToggle(label))}
             style={{
               display: 'flex', alignItems: 'center', gap: '10px',
               padding: '13px 16px',
-              cursor: subcats.length > 0 ? 'pointer' : 'default',
+              cursor: onNavigate || subcats.length > 0 ? 'pointer' : 'default',
               borderTop: idx > 0 ? '1px solid #f9fafb' : 'none',
               background: expandedCat === label ? '#fafafa' : 'white',
             }}
@@ -174,41 +178,35 @@ function CategoryRows({
             <span style={{ flex: 1, fontSize: '14px', color: '#1f2937', fontWeight: 500 }}>
               {label}
               {subcats.length > 0 && (
-                <span style={{ fontSize: '10px', color: '#9ca3af', marginRight: '4px' }}>
-                  {expandedCat === label ? ' ▴' : ' ▾'}
+                <span
+                  style={{ fontSize: '10px', color: '#9ca3af', marginRight: '4px', padding: '0 3px', cursor: 'pointer' }}
+                  onClick={(e) => { e.stopPropagation(); onToggle(label); }}
+                >
+                  {expandedCat === label ? '▴' : '▾'}
                 </span>
               )}
             </span>
             <span style={{ fontSize: '14px', fontWeight: 600, color: '#1f2937' }}>{fmt(avg)}</span>
             <span style={{ fontSize: '12px', color: '#9ca3af', minWidth: '40px', textAlign: 'left' }}>{fmtPct(pct)}</span>
-            {onNavigate && (
-              <button
-                type="button"
-                style={NAV_ARROW}
-                onClick={(e) => { e.stopPropagation(); onNavigate(numericId, null); }}
-              >‹</button>
-            )}
           </div>
 
           {expandedCat === label && subcats.map(({ label: sl, icon: si, avg: sa, pct: sp, numericId: subNumericId }) => (
-            <div key={sl} style={{
-              display: 'flex', alignItems: 'center', gap: '10px',
-              paddingTop: '10px', paddingBottom: '10px',
-              paddingRight: '36px', paddingLeft: '16px',
-              borderTop: '1px solid #f3f4f6',
-              background: '#f9fafb',
-            }}>
+            <div
+              key={sl}
+              onClick={() => onNavigate && onNavigate(numericId, label, subNumericId)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '10px',
+                paddingTop: '10px', paddingBottom: '10px',
+                paddingRight: '36px', paddingLeft: '16px',
+                borderTop: '1px solid #f3f4f6',
+                background: '#f9fafb',
+                cursor: onNavigate ? 'pointer' : 'default',
+              }}
+            >
               <span style={{ fontSize: '16px', flexShrink: 0, width: '22px', textAlign: 'center' }}>{si}</span>
               <span style={{ flex: 1, fontSize: '13px', color: '#6b7280' }}>{sl}</span>
               <span style={{ fontSize: '13px', fontWeight: 500, color: subcatAmtColor }}>{fmt(sa)}</span>
               <span style={{ fontSize: '11px', color: '#9ca3af', minWidth: '40px', textAlign: 'left' }}>{fmtPct(sp)}</span>
-              {onNavigate && (
-                <button
-                  type="button"
-                  style={{ ...NAV_ARROW, fontSize: '16px' }}
-                  onClick={() => onNavigate(numericId, subNumericId)}
-                >‹</button>
-              )}
             </div>
           ))}
         </div>
@@ -466,10 +464,11 @@ export default function Dashboard({ transactions, categories, recurringRules, on
 
   const today = currentMonthStr();
 
-  const handleCatNavigate = (catNumericId: number | null, subNumericId: number | null) => {
+  const handleCatNavigate = (catNumericId: number | null, catLabel: string, subNumericId: number | null) => {
     if (!onNavigate) return;
     onNavigate({
       catNumericId,
+      catLabel,
       subNumericId,
       dateFilter: timeFilter === '1m' ? 'this-month' : 'range',
       selectedMonth: specificMonth,
