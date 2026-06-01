@@ -149,6 +149,10 @@ const HOUSING_LABELS = new Set([
   'שכ"ד', 'שכד',
 ]);
 
+const LOAN_LABELS = new Set([
+  'החזר הלוואה', 'הלוואה', 'החזרי הלוואות', 'החזר משכנתא', 'משכנתא',
+]);
+
 function withSectionPct(rows: CatRow[]): CatRow[] {
   const sectionAvg = rows.reduce((s, r) => s + r.avg, 0);
   return rows.map((r) => ({ ...r, pct: sectionAvg > 0 ? (r.avg / sectionAvg) * 100 : 0 }));
@@ -438,8 +442,12 @@ export default function Dashboard({ transactions, categories, recurringRules, on
     () => withSectionPct(catExpenses.filter((r) => HOUSING_LABELS.has(r.label))),
     [catExpenses],
   );
+  const loanExpenses = useMemo(
+    () => withSectionPct(catExpenses.filter((r) => !HOUSING_LABELS.has(r.label) && LOAN_LABELS.has(r.label))),
+    [catExpenses],
+  );
   const personalExpenses = useMemo(
-    () => withSectionPct(catExpenses.filter((r) => !HOUSING_LABELS.has(r.label))),
+    () => withSectionPct(catExpenses.filter((r) => !HOUSING_LABELS.has(r.label) && !LOAN_LABELS.has(r.label))),
     [catExpenses],
   );
 
@@ -586,11 +594,16 @@ export default function Dashboard({ transactions, categories, recurringRules, on
                 </div>
               </div>
 
-              {(housingExpenses.length > 0 || personalExpenses.length > 0) && (
+              {(housingExpenses.length > 0 || personalExpenses.length > 0 || loanExpenses.length > 0) && (
                 <>
                   {housingExpenses.length > 0 && (
                     <div className="dash-section">
-                      <h3 className="dash-section-title">הוצאות דיור לפי קטגוריה</h3>
+                      <div style={{ marginBottom: '10px', direction: 'rtl' }}>
+                        <h3 className="dash-section-title" style={{ margin: 0 }}>הוצאות דיור</h3>
+                        <span style={{ fontSize: '11px', color: '#9ca3af', fontWeight: 500, marginTop: '3px', display: 'block' }}>
+                          סה"כ {fmt(housingExpenses.reduce((s, r) => s + r.avg, 0))}
+                        </span>
+                      </div>
                       <CategoryRows
                         rows={housingExpenses}
                         expandedCat={expandedExpCat}
@@ -617,12 +630,34 @@ export default function Dashboard({ transactions, categories, recurringRules, on
                       />
                     </div>
                   )}
+                  {loanExpenses.length > 0 && (
+                    <div className="dash-section">
+                      <div style={{ marginBottom: '10px', direction: 'rtl' }}>
+                        <h3 className="dash-section-title" style={{ margin: 0 }}>החזרי הלוואות</h3>
+                        <span style={{ fontSize: '11px', color: '#9ca3af', fontWeight: 500, marginTop: '3px', display: 'block' }}>
+                          סה"כ {fmt(loanExpenses.reduce((s, r) => s + r.avg, 0))}
+                        </span>
+                      </div>
+                      <CategoryRows
+                        rows={loanExpenses}
+                        expandedCat={expandedExpCat}
+                        onToggle={(l) => setExpandedExpCat((p) => (p === l ? null : l))}
+                        subcatAmtColor="#ef4444"
+                        onNavigate={onNavigate ? handleExpenseCatNavigate : undefined}
+                      />
+                    </div>
+                  )}
                 </>
               )}
 
               {catIncome.length > 0 && (
                 <div className="dash-section">
-                  <h3 className="dash-section-title">הכנסות לפי קטגוריה</h3>
+                  <div style={{ marginBottom: '10px', direction: 'rtl' }}>
+                    <h3 className="dash-section-title" style={{ margin: 0 }}>הכנסות לפי קטגוריה</h3>
+                    <span style={{ fontSize: '11px', color: '#9ca3af', fontWeight: 500, marginTop: '3px', display: 'block' }}>
+                      סה"כ {fmt(catIncome.reduce((s, r) => s + r.avg, 0))}
+                    </span>
+                  </div>
                   <CategoryRows
                     rows={catIncome}
                     expandedCat={expandedIncCat}
