@@ -92,11 +92,15 @@ function buildCatRows(
   const subcatMeta = new Map<string, Map<string, SubEntry>>();
 
   txList.filter((t) => t.type === type).forEach((t) => {
+    // Group by label: all same-category transactions merge into one row, even
+    // across months or when categoryNumericId differs or is null on older records.
+    // Expense/income separation is guaranteed by the type filter above — the two
+    // buildCatRows calls (expense / income) never share the same catMeta map.
     const ck = t.categoryLabel;
     if (!catMeta.has(ck)) {
-      // Resolve numericId: use the transaction's value, fall back to categories list.
+      // Resolve numericId type-aware so expense "מתנות" never picks up income "מתנות"'s id.
       const numericId = t.categoryNumericId
-        ?? categories.find((c) => c.label === t.categoryLabel)?.numericId
+        ?? categories.find((c) => c.label === t.categoryLabel && (c.type === type || c.type === 'both'))?.numericId
         ?? null;
       catMeta.set(ck, { label: t.categoryLabel, numericId, amount: 0 });
     }
@@ -113,7 +117,11 @@ function buildCatRows(
 
   return Array.from(catMeta.values())
     .map(({ label, numericId, amount: catTotal }) => {
-      const catObj  = categories.find((c) => numericId != null ? c.numericId === numericId : c.label === label);
+      const catObj  = categories.find((c) =>
+        numericId != null
+          ? c.numericId === numericId
+          : c.label === label && (c.type === type || c.type === 'both'),
+      );
       const catIcon = catObj?.icon ?? '';
       return {
         label, icon: catIcon,
@@ -464,16 +472,23 @@ export default function Dashboard({ transactions, categories, recurringRules, on
 
   const today = currentMonthStr();
 
-  const handleCatNavigate = (catNumericId: number | null, catLabel: string, subNumericId: number | null) => {
+  const buildNavFilters = (catNumericId: number | null, catLabel: string, subNumericId: number | null) => ({
+    catNumericId,
+    catLabel,
+    subNumericId,
+    dateFilter: (timeFilter === '1m' ? 'this-month' : 'range') as 'this-month' | 'range',
+    selectedMonth: specificMonth,
+    rangeStart: timeFilter === '1m' ? null : getStartDate(timeFilter),
+  });
+
+  const handleExpenseCatNavigate = (catNumericId: number | null, catLabel: string, subNumericId: number | null) => {
     if (!onNavigate) return;
-    onNavigate({
-      catNumericId,
-      catLabel,
-      subNumericId,
-      dateFilter: timeFilter === '1m' ? 'this-month' : 'range',
-      selectedMonth: specificMonth,
-      rangeStart: timeFilter === '1m' ? null : getStartDate(timeFilter),
-    });
+    onNavigate({ ...buildNavFilters(catNumericId, catLabel, subNumericId), txType: 'expense' });
+  };
+
+  const handleIncomeCatNavigate = (catNumericId: number | null, catLabel: string, subNumericId: number | null) => {
+    if (!onNavigate) return;
+    onNavigate({ ...buildNavFilters(catNumericId, catLabel, subNumericId), txType: 'income' });
   };
 
   const TABS: { key: TabType; label: string }[] = [
@@ -581,7 +596,7 @@ export default function Dashboard({ transactions, categories, recurringRules, on
                         expandedCat={expandedExpCat}
                         onToggle={(l) => setExpandedExpCat((p) => (p === l ? null : l))}
                         subcatAmtColor="#ef4444"
-                        onNavigate={onNavigate ? handleCatNavigate : undefined}
+                        onNavigate={onNavigate ? handleExpenseCatNavigate : undefined}
                       />
                     </div>
                   )}
@@ -598,7 +613,7 @@ export default function Dashboard({ transactions, categories, recurringRules, on
                         expandedCat={expandedExpCat}
                         onToggle={(l) => setExpandedExpCat((p) => (p === l ? null : l))}
                         subcatAmtColor="#ef4444"
-                        onNavigate={onNavigate ? handleCatNavigate : undefined}
+                        onNavigate={onNavigate ? handleExpenseCatNavigate : undefined}
                       />
                     </div>
                   )}
@@ -613,7 +628,7 @@ export default function Dashboard({ transactions, categories, recurringRules, on
                     expandedCat={expandedIncCat}
                     onToggle={(l) => setExpandedIncCat((p) => (p === l ? null : l))}
                     subcatAmtColor="#16a34a"
-                    onNavigate={onNavigate ? handleCatNavigate : undefined}
+                    onNavigate={onNavigate ? handleIncomeCatNavigate : undefined}
                   />
                 </div>
               )}

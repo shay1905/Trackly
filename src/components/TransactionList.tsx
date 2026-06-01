@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Category, Transaction, RecurringRule, NavFilters } from '../types';
+import { Category, Transaction, RecurringRule, NavFilters, TransactionType } from '../types';
 import ConfirmDialog from './ConfirmDialog';
 import { useLongPress } from '../hooks/useLongPress';
 
@@ -168,6 +168,7 @@ export default function TransactionList({
   const [selectedCatId,    setSelectedCatId]    = useState<number | null>(() => navFilters?.catNumericId ?? null);
   const [selectedCatLabel, setSelectedCatLabel] = useState<string | null>(() => navFilters?.catLabel ?? null);
   const [selectedSubId,    setSelectedSubId]    = useState<number | null>(() => navFilters?.subNumericId ?? null);
+  const [selectedTxType,   setSelectedTxType]   = useState<TransactionType | null>(() => navFilters?.txType ?? null);
   const [editingTx,       setEditingTx]       = useState<Transaction | null>(null);
   const [editState,       setEditState]       = useState<EditState | null>(null);
   const [saveAttempted,   setSaveAttempted]   = useState(false);
@@ -189,6 +190,7 @@ export default function TransactionList({
     selectedCatId !== null ||
     selectedCatLabel !== null ||
     selectedSubId !== null ||
+    selectedTxType !== null ||
     search !== '';
 
   const clearFilters = () => {
@@ -198,6 +200,7 @@ export default function TransactionList({
     setSelectedCatId(null);
     setSelectedCatLabel(null);
     setSelectedSubId(null);
+    setSelectedTxType(null);
     setSearch('');
     onClearNavFilters?.();
   };
@@ -242,6 +245,7 @@ export default function TransactionList({
       }
     })
     .filter((t) => !search || t.description.toLowerCase().includes(search.toLowerCase()))
+    .filter((t) => selectedTxType == null || t.type === selectedTxType)
     .filter((t) => {
       if (selectedCatId != null) return t.categoryNumericId === selectedCatId || (t.categoryNumericId == null && t.categoryLabel === selectedCatLabel);
       if (selectedCatLabel != null) return t.categoryLabel === selectedCatLabel;

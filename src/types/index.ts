@@ -88,6 +88,7 @@ export interface NavFilters {
   catNumericId: number | null;
   catLabel: string | null;
   subNumericId: number | null;
+  txType?: TransactionType;
   dateFilter: 'this-month' | 'range';
   selectedMonth: string;
   rangeStart: string | null;
