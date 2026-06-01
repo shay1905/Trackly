@@ -260,6 +260,14 @@ export default function TransactionList({
 
   const groups = groupByDate(filtered);
 
+  const isCurrentMonth = filter === 'this-month' && selectedMonth === thisMonth;
+  const currentPastFiltered = isCurrentMonth ? filtered.filter((t) => t.date <= today) : filtered;
+  const futureThisMonthFiltered = isCurrentMonth
+    ? filtered.filter((t) => t.date > today).sort((a, b) => a.date.localeCompare(b.date))
+    : [];
+  const currentPastGroups = groupByDate(currentPastFiltered);
+  const futureThisMonthGroups = groupByDate(futureThisMonthFiltered);
+
   // Future installments — exclude rule-generated recurring transactions
   const futureTransactions = useMemo(
     () => transactions
@@ -1052,20 +1060,66 @@ export default function TransactionList({
       )}
 
       {/* ── Transaction list ── */}
-      {filtered.length === 0 ? (
-        <div className="history-empty">
-          <div className="history-empty-icon">📭</div>
-          <p>אין עסקאות בתצוגה זו</p>
-        </div>
+      {isCurrentMonth ? (
+        currentPastFiltered.length === 0 && futureThisMonthFiltered.length === 0 ? (
+          <div className="history-empty">
+            <div className="history-empty-icon">📭</div>
+            <p>אין עסקאות בתצוגה זו</p>
+          </div>
+        ) : (
+          <div className="history-list">
+            {currentPastFiltered.length === 0 ? (
+              <div style={{ color: '#9ca3af', fontSize: '13px', textAlign: 'center', padding: '16px 0 8px' }}>
+                אין עסקאות עד היום
+              </div>
+            ) : (
+              currentPastGroups.map(([date, items]) => (
+                <div key={date} className="history-group">
+                  <div className="history-date-label">{formatDate(date)}</div>
+                  {items.map((t) => renderTxCard(t))}
+                </div>
+              ))
+            )}
+
+            {futureThisMonthFiltered.length > 0 && (
+              <>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: '8px',
+                  margin: '16px 0 10px', padding: '0 2px',
+                }}>
+                  <div style={{ flex: 1, height: '1px', background: '#e5e7eb' }} />
+                  <span style={{
+                    fontSize: '12px', fontWeight: 700, color: '#6b7280',
+                    letterSpacing: '0.03em', whiteSpace: 'nowrap',
+                  }}>עסקאות עתידיות</span>
+                  <div style={{ flex: 1, height: '1px', background: '#e5e7eb' }} />
+                </div>
+                {futureThisMonthGroups.map(([date, items]) => (
+                  <div key={date} className="history-group">
+                    <div className="history-date-label" style={{ color: '#9ca3af' }}>{formatDate(date)}</div>
+                    {items.map((t) => renderTxCard(t))}
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+        )
       ) : (
-        <div className="history-list">
-          {groups.map(([date, items]) => (
-            <div key={date} className="history-group">
-              <div className="history-date-label">{formatDate(date)}</div>
-              {items.map((t) => renderTxCard(t))}
-            </div>
-          ))}
-        </div>
+        filtered.length === 0 ? (
+          <div className="history-empty">
+            <div className="history-empty-icon">📭</div>
+            <p>אין עסקאות בתצוגה זו</p>
+          </div>
+        ) : (
+          <div className="history-list">
+            {groups.map(([date, items]) => (
+              <div key={date} className="history-group">
+                <div className="history-date-label">{formatDate(date)}</div>
+                {items.map((t) => renderTxCard(t))}
+              </div>
+            ))}
+          </div>
+        )
       )}
 
       {/* ── Delete confirms ── */}
