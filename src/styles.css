@@ -1597,6 +1597,23 @@ input.field-input[type="date"]::-webkit-calendar-picker-indicator {
   transition: width 0.35s ease;
 }
 
+/* Category row — navigation icon tap target */
+.cat-nav-icon {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  cursor: pointer;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  padding: 0 14px 0 4px;
+  color: #d1d5db;
+  flex-shrink: 0;
+  user-select: none;
+}
+.cat-nav-icon:active {
+  color: #9ca3af;
+}
+
 .dash-cat-amount {
   font-size: 13px;
   font-weight: 700;

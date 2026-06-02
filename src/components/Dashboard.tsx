@@ -177,48 +177,67 @@ function CategoryRows({
       {rows.map(({ label, icon, avg, pct, subcats, numericId }, idx) => (
         <div key={label}>
           <div
-            onClick={() => onNavigate ? onNavigate(numericId, label, null) : (subcats.length > 0 && onToggle(label))}
             style={{
-              display: 'flex', alignItems: 'center', gap: '10px',
-              padding: '13px 16px',
-              cursor: onNavigate || subcats.length > 0 ? 'pointer' : 'default',
+              display: 'flex', alignItems: 'center',
               borderTop: idx > 0 ? '1px solid #f9fafb' : 'none',
               background: expandedCat === label ? '#fafafa' : 'white',
             }}
           >
-            <span style={{ fontSize: '20px', flexShrink: 0, width: '26px', textAlign: 'center' }}>{icon}</span>
-            <span style={{ flex: 1, fontSize: '14px', color: '#1f2937', fontWeight: 500 }}>
-              {label}
-              {subcats.length > 0 && (
-                <span
-                  style={{ fontSize: '10px', color: '#9ca3af', marginRight: '4px', padding: '0 3px', cursor: 'pointer' }}
-                  onClick={(e) => { e.stopPropagation(); onToggle(label); }}
-                >
-                  {expandedCat === label ? '▴' : '▾'}
-                </span>
-              )}
-            </span>
-            <span style={{ fontSize: '14px', fontWeight: 600, color: '#1f2937' }}>{fmt(avg)}</span>
-            <span style={{ fontSize: '12px', color: '#9ca3af', minWidth: '40px', textAlign: 'left' }}>{fmtPct(pct)}</span>
+            {/* Row body: icon + label + amount + pct — clicks expand/collapse */}
+            <div
+              onClick={() => subcats.length > 0 && onToggle(label)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '10px', flex: 1,
+                padding: '13px 10px 13px 16px',
+                cursor: subcats.length > 0 ? 'pointer' : 'default',
+              }}
+            >
+              <span style={{ fontSize: '20px', flexShrink: 0, width: '26px', textAlign: 'center' }}>{icon}</span>
+              <span style={{ flex: 1, fontSize: '14px', color: '#1f2937', fontWeight: 500 }}>
+                {label}
+                {subcats.length > 0 && (
+                  <span style={{ fontSize: '10px', color: '#9ca3af', marginRight: '4px', padding: '0 3px' }}>
+                    {expandedCat === label ? '▴' : '▾'}
+                  </span>
+                )}
+              </span>
+              <span style={{ fontSize: '14px', fontWeight: 600, color: '#1f2937', flexShrink: 0 }}>{fmt(avg)}</span>
+              <span style={{ fontSize: '12px', color: '#9ca3af', minWidth: '34px', textAlign: 'left', flexShrink: 0 }}>{fmtPct(pct)}</span>
+            </div>
+            {/* Navigation icon — separate action to go to Transactions */}
+            {onNavigate && (
+              <div onClick={() => onNavigate(numericId, label, null)} className="cat-nav-icon">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="9 18 15 12 9 6" />
+                </svg>
+              </div>
+            )}
           </div>
 
           {expandedCat === label && subcats.map(({ label: sl, icon: si, avg: sa, pct: sp, numericId: subNumericId }) => (
             <div
               key={sl}
-              onClick={() => onNavigate && onNavigate(numericId, label, subNumericId)}
               style={{
-                display: 'flex', alignItems: 'center', gap: '10px',
-                paddingTop: '10px', paddingBottom: '10px',
-                paddingRight: '36px', paddingLeft: '16px',
+                display: 'flex', alignItems: 'center',
                 borderTop: '1px solid #f3f4f6',
                 background: '#f9fafb',
-                cursor: onNavigate ? 'pointer' : 'default',
               }}
             >
-              <span style={{ fontSize: '16px', flexShrink: 0, width: '22px', textAlign: 'center' }}>{si}</span>
-              <span style={{ flex: 1, fontSize: '13px', color: '#6b7280' }}>{sl}</span>
-              <span style={{ fontSize: '13px', fontWeight: 500, color: subcatAmtColor }}>{fmt(sa)}</span>
-              <span style={{ fontSize: '11px', color: '#9ca3af', minWidth: '40px', textAlign: 'left' }}>{fmtPct(sp)}</span>
+              {/* Row body: icon + label + amount + pct */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, padding: '10px 10px 10px 36px' }}>
+                <span style={{ fontSize: '16px', flexShrink: 0, width: '22px', textAlign: 'center' }}>{si}</span>
+                <span style={{ flex: 1, fontSize: '13px', color: '#6b7280' }}>{sl}</span>
+                <span style={{ fontSize: '13px', fontWeight: 500, color: subcatAmtColor, flexShrink: 0 }}>{fmt(sa)}</span>
+                <span style={{ fontSize: '11px', color: '#9ca3af', minWidth: '34px', textAlign: 'left', flexShrink: 0 }}>{fmtPct(sp)}</span>
+              </div>
+              {/* Navigation icon */}
+              {onNavigate && (
+                <div onClick={() => onNavigate(numericId, label, subNumericId)} className="cat-nav-icon">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="9 18 15 12 9 6" />
+                  </svg>
+                </div>
+              )}
             </div>
           ))}
         </div>
