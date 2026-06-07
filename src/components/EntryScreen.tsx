@@ -151,6 +151,11 @@ export default function EntryScreen() {
     if (view !== 'history') setNavFilters(null);
   }, [view]);
 
+  // Reset transaction date to today whenever the user leaves the entry screen
+  useEffect(() => {
+    if (view !== 'entry') setForm((f) => ({ ...f, date: today() }));
+  }, [view]);
+
   // Scroll carousel to תיעוד (index 1) on mount
   useEffect(() => {
     const el = carouselRef.current;
@@ -273,6 +278,7 @@ export default function EntryScreen() {
       installments: 2,
       recurrence: 'one-time',
       transactionMode: 'one-time',
+      date: today(),
     }));
     setErrors({});
     setEditMode(false);
