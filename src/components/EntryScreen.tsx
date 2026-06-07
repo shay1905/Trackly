@@ -18,6 +18,15 @@ import ItemActionMenu from './ItemActionMenu';
 
 const today = () => new Date().toISOString().split('T')[0];
 
+function lastDayOfPrevMonth(): string {
+  const now = new Date();
+  const d = new Date(now.getFullYear(), now.getMonth(), 0);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 const defaultForm = (): TransactionForm => ({
   type: 'expense',
   amount: '',
@@ -644,13 +653,36 @@ export default function EntryScreen() {
             </div>
           )}
 
+          <div className="date-field-wrap">
+            <label className="field-label">
+              {form.type === 'expense' && form.transactionMode === 'installments'
+                ? 'תאריך תשלום ראשון'
+                : form.type === 'expense' && form.transactionMode === 'monthly-recurring'
+                ? 'תאריך התחלה'
+                : 'תאריך עסקה'}
+            </label>
+            <div className="date-field-row">
+              <input
+                className="field-input"
+                type="date"
+                value={form.date}
+                onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
+              />
+              <button
+                type="button"
+                className="prev-month-chip"
+                onClick={() => setForm((f) => ({ ...f, date: lastDayOfPrevMonth() }))}
+              >
+                חודש קודם
+              </button>
+            </div>
+          </div>
+
           <AdvancedSection
             open={advancedOpen}
             onToggle={() => setAdvancedOpen((v) => !v)}
             description={form.description}
             onDescriptionChange={(v) => setForm((f) => ({ ...f, description: v }))}
-            date={form.date}
-            onDateChange={(v) => setForm((f) => ({ ...f, date: v }))}
             type={form.type}
             transactionMode={form.transactionMode}
             onTransactionModeChange={setTransactionMode}

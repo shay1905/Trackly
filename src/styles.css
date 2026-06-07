@@ -553,6 +553,43 @@ input  { font-family: inherit; }
 .sub-add-confirm { background: var(--accent); color: #fff; }
 .sub-add-cancel  { background: var(--surface-2); color: var(--text-2); }
 
+/* ── Date field ──────────────────────────────────────────────────── */
+.date-field-wrap {
+  margin: 12px 20px 0;
+}
+
+.date-field-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.date-field-row .field-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.prev-month-chip {
+  flex-shrink: 0;
+  height: 44px;
+  padding: 0 13px;
+  border-radius: var(--radius-sm);
+  border: 2px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.13s, color 0.13s;
+  -webkit-tap-highlight-color: transparent;
+}
+.prev-month-chip:active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 /* ── Advanced section ────────────────────────────────────────────── */
 .advanced-section { margin: 14px 20px 0; }
 

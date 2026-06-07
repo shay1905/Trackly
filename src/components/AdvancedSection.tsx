@@ -11,8 +11,6 @@ interface Props {
   onToggle: () => void;
   description: string;
   onDescriptionChange: (v: string) => void;
-  date: string;
-  onDateChange: (v: string) => void;
   type: TransactionType;
   transactionMode: TransactionMode;
   onTransactionModeChange: (v: TransactionMode) => void;
@@ -23,7 +21,6 @@ interface Props {
 export default function AdvancedSection({
   open, onToggle,
   description, onDescriptionChange,
-  date, onDateChange,
   type,
   transactionMode, onTransactionModeChange,
   installments, onInstallmentsChange,
@@ -50,7 +47,7 @@ export default function AdvancedSection({
           />
         </div>
 
-        {/* Expense: 3-way mode chips + mode-specific fields */}
+        {/* Expense: 3-way mode chips + installments stepper */}
         {type === 'expense' && (
           <>
             <div className="field-group">
@@ -69,78 +66,31 @@ export default function AdvancedSection({
               </div>
             </div>
 
-            {transactionMode === 'one-time' && (
+            {transactionMode === 'installments' && (
               <div className="field-group">
-                <label className="field-label">תאריך עסקה</label>
-                <input
-                  className="field-input"
-                  type="date"
-                  value={date}
-                  onChange={(e) => onDateChange(e.target.value)}
-                />
+                <label className="field-label">מספר תשלומים</label>
+                <div className="installments-row">
+                  <button
+                    className="stepper-btn"
+                    type="button"
+                    onClick={() => onInstallmentsChange(Math.max(2, installments - 1))}
+                    disabled={installments <= 2}
+                  >−</button>
+                  <span className="stepper-value">{installments}</span>
+                  <button
+                    className="stepper-btn"
+                    type="button"
+                    onClick={() => onInstallmentsChange(installments + 1)}
+                  >+</button>
+                </div>
+                <p className="field-note-info">ייווצרו {installments} עסקאות חודשיות נפרדות</p>
               </div>
             )}
 
-            {transactionMode === 'installments' && (
-              <>
-                <div className="field-group">
-                  <label className="field-label">תאריך תשלום ראשון</label>
-                  <input
-                    className="field-input"
-                    type="date"
-                    value={date}
-                    onChange={(e) => onDateChange(e.target.value)}
-                  />
-                </div>
-                <div className="field-group">
-                  <label className="field-label">מספר תשלומים</label>
-                  <div className="installments-row">
-                    <button
-                      className="stepper-btn"
-                      type="button"
-                      onClick={() => onInstallmentsChange(Math.max(2, installments - 1))}
-                      disabled={installments <= 2}
-                    >−</button>
-                    <span className="stepper-value">{installments}</span>
-                    <button
-                      className="stepper-btn"
-                      type="button"
-                      onClick={() => onInstallmentsChange(installments + 1)}
-                    >+</button>
-                  </div>
-                  <p className="field-note-info">ייווצרו {installments} עסקאות חודשיות נפרדות</p>
-                </div>
-              </>
-            )}
-
             {transactionMode === 'monthly-recurring' && (
-              <>
-                <div className="field-group">
-                  <label className="field-label">תאריך התחלה</label>
-                  <input
-                    className="field-input"
-                    type="date"
-                    value={date}
-                    onChange={(e) => onDateChange(e.target.value)}
-                  />
-                </div>
-                <p className="field-note-info" style={{ marginTop: '4px' }}>יחויב כל חודש עד שתבטל</p>
-              </>
+              <p className="field-note-info" style={{ marginTop: '4px' }}>יחויב כל חודש עד שתבטל</p>
             )}
           </>
-        )}
-
-        {/* Income: just date */}
-        {type === 'income' && (
-          <div className="field-group">
-            <label className="field-label">תאריך עסקה</label>
-            <input
-              className="field-input"
-              type="date"
-              value={date}
-              onChange={(e) => onDateChange(e.target.value)}
-            />
-          </div>
         )}
       </div>
     </div>
