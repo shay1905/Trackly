@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Transaction, Category, RecurringRule, NavFilters } from '../types';
+import { currentMonthStr, getStartDate as getStartDateFor, filterToFullMonths, computeSavingsRate } from '../utils/reportMath';
 
 interface Props {
   transactions: Transaction[];
@@ -21,11 +22,6 @@ const TIME_FILTERS: { key: TimeFilter; label: string }[] = [
 
 const HE_MONTHS = ['ינו׳','פבר׳','מרץ','אפר׳','מאי','יוני','יולי','אוג׳','ספט׳','אוק׳','נוב׳','דצמ׳'];
 
-function currentMonthStr(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-}
-
 function prevMonth(ym: string): string {
   const [y, m] = ym.split('-').map(Number);
   return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
@@ -43,13 +39,8 @@ function fmtMonthHe(ym: string): string {
 
 function getStartDate(filter: TimeFilter): string | null {
   if (filter === 'all') return null;
-  const now = new Date();
   const monthsBack = filter === '3m' ? 3 : filter === '6m' ? 6 : 12;
-  // Integer arithmetic avoids toISOString() UTC-shift (e.g. Israel UTC+3 would turn Feb 1 → Jan 31)
-  const totalMonths = now.getFullYear() * 12 + now.getMonth() - monthsBack;
-  const year = Math.floor(totalMonths / 12);
-  const month = totalMonths % 12; // 0-indexed
-  return `${year}-${String(month + 1).padStart(2, '0')}-01`;
+  return getStartDateFor(monthsBack);
 }
 
 function fmt(n: number): string {
@@ -421,7 +412,6 @@ export default function Dashboard({ transactions, categories, recurringRules, on
   const income   = useMemo(() => filtered.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0), [filtered]);
   const expenses = useMemo(() => filtered.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0), [filtered]);
   const balance  = income - expenses;
-  const savingsRate = income > 0 ? (balance / income) * 100 : null;
 
   const monthCount = useMemo(() => {
     if (timeFilter === '1m')  return 1;
@@ -433,14 +423,17 @@ export default function Dashboard({ transactions, categories, recurringRules, on
   }, [timeFilter, filtered]);
 
   // For multi-month averages, exclude the current (partial) month so averages
-  // are based only on complete calendar months.
-  const cm = currentMonthStr();
+  // are based only on complete calendar months. '1m' intentionally shows the
+  // browsed month in full (even if it's the still-in-progress current month).
   const filteredFull = useMemo(
-    () => timeFilter === '1m' ? filtered : filtered.filter((t) => t.date.slice(0, 7) < cm),
-    [filtered, timeFilter, cm],
+    () => timeFilter === '1m' ? filtered : filterToFullMonths(filtered, null),
+    [filtered, timeFilter],
   );
   const incomeFull   = useMemo(() => filteredFull.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0), [filteredFull]);
   const expensesFull = useMemo(() => filteredFull.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0), [filteredFull]);
+  // Savings rate is total savings / total income over complete calendar months only —
+  // computed from aggregate sums (not an average of monthly percentages), since income varies by month.
+  const savingsRate = useMemo(() => computeSavingsRate(filteredFull), [filteredFull]);
   const fullMonthCount = useMemo(() => {
     if (timeFilter === '1m') return 1;
     const months = new Set(filteredFull.map((t) => t.date.slice(0, 7)));
