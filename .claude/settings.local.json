@@ -27,7 +27,8 @@
       "Bash(Select-Object FullName)",
       "PowerShell(Get-ChildItem -Path C:\\\\Shay\\\\Trackly -Recurse -Name | Where-Object { $_ -match \"report|Report\" })",
       "Bash(npm ls *)",
-      "Bash(npx vitest *)"
+      "Bash(npx vitest *)",
+      "Bash(npx eslint *)"
     ]
   }
 }

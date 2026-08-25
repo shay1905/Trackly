@@ -59,6 +59,29 @@ const RECURRENCE_LABELS: Record<string, string> = {
   'one-time': '', monthly: 'חודשי', weekly: 'שבועי', yearly: 'שנתי',
 };
 
+// Same housing-category labels used to split housing vs. personal expenses in the reports screen.
+const HOUSING_LABELS = new Set([
+  'דיור', 'שכירות', 'חשמל', 'מים', 'גז', 'אינטרנט',
+  'ארנונה', 'תחזוקת בית', 'אחזקת בית', 'ביטוח בית',
+  'ועד בית', 'כלל הוצאות הבית', 'הוצאות דיור',
+  'שכ"ד', 'שכד',
+]);
+
+function isHousingLabel(label: string): boolean {
+  return HOUSING_LABELS.has(label);
+}
+
+// Category filter chips: pin these labels first (in this order), keep the rest in their existing order.
+const PRIORITY_CAT_LABELS = ['דיור', 'מינויים', 'בריאות'];
+
+function sortCatsByPriority<T extends { label: string }>(cats: T[]): T[] {
+  const priority = PRIORITY_CAT_LABELS
+    .map((label) => cats.find((c) => c.label === label))
+    .filter((c): c is T => !!c);
+  const rest = cats.filter((c) => !PRIORITY_CAT_LABELS.includes(c.label));
+  return [...priority, ...rest];
+}
+
 function todayStr() {
   return new Date().toISOString().split('T')[0];
 }
@@ -215,7 +238,7 @@ export default function TransactionList({
         result.push({ numericId: t.categoryNumericId, label: t.categoryLabel, icon: cat?.icon ?? '🏷️' });
       }
     }
-    return result;
+    return sortCatsByPriority(result);
   }, [transactions, categories]);
 
   const uniqueSubs = useMemo(() => {
@@ -275,10 +298,25 @@ export default function TransactionList({
       .sort((a, b) => a.date.localeCompare(b.date)),
     [transactions, today],
   );
-  const futureByMonth = useMemo(() => groupByMonth(futureTransactions), [futureTransactions]);
+  const futureHousingByMonth = useMemo(
+    () => groupByMonth(futureTransactions.filter((t) => isHousingLabel(t.categoryLabel))),
+    [futureTransactions],
+  );
+  const futurePersonalByMonth = useMemo(
+    () => groupByMonth(futureTransactions.filter((t) => !isHousingLabel(t.categoryLabel))),
+    [futureTransactions],
+  );
 
   // Show all active recurring rules — they persist until explicitly cancelled.
   const futureRecurringRules = useMemo(() => recurringRules, [recurringRules]);
+  const futureHousingRecurringRules = useMemo(
+    () => futureRecurringRules.filter((r) => isHousingLabel(r.categoryLabel)),
+    [futureRecurringRules],
+  );
+  const futurePersonalRecurringRules = useMemo(
+    () => futureRecurringRules.filter((r) => !isHousingLabel(r.categoryLabel)),
+    [futureRecurringRules],
+  );
 
   // ── Delete ──────────────────────────────────────────────────────────────
   const confirmDelete = () => {
@@ -541,6 +579,128 @@ export default function TransactionList({
   }
 
   // ── Future view ──────────────────────────────────────────────────────────
+  function renderFuturePaymentsGroup(byMonth: [string, Transaction[]][], emptyText: string) {
+    if (byMonth.length === 0) {
+      return (
+        <div style={{ color: '#9ca3af', fontSize: '13px', textAlign: 'center', padding: '8px 0 16px' }}>
+          {emptyText}
+        </div>
+      );
+    }
+    return byMonth.map(([month, items]) => (
+      <div key={month} style={{ marginBottom: '16px' }}>
+        <div style={{
+          fontSize: '12px', fontWeight: 600, color: '#6b7280',
+          marginBottom: '6px', padding: '0 2px',
+          textTransform: 'uppercase',
+        }}>
+          {fmtMonthHe(month)}
+        </div>
+        {items.map((t) => {
+          const groupId = t.installmentGroupId ?? t.recurrenceGroupId;
+          const isInstallment = t.installmentTotal && t.installmentTotal > 1;
+          return (
+            <div
+              key={t.id}
+              className={`tx-item ${t.type}${lp.pressingId === t.id ? ' tx-pressing' : ''}`}
+              onPointerDown={(e) => {
+                if ((e.target as HTMLElement).closest('button')) return;
+                lp.start(t.id, () => openEdit(t));
+              }}
+              onPointerUp={() => lp.cancel()}
+              onPointerCancel={() => lp.cancel()}
+              onPointerLeave={() => lp.cancel()}
+              onContextMenu={(e) => e.preventDefault()}
+            >
+              <div className="tx-icon-wrap">
+                <span className="tx-icon">{getDisplayIcon(t, categories)}</span>
+              </div>
+              <div className="tx-info">
+                <div className="tx-category">
+                  {t.categoryLabel}
+                  {t.subcategoryLabel && <span className="tx-sub"> · {t.subcategoryLabel}</span>}
+                </div>
+                <div className="tx-badges">
+                  {isInstallment && (
+                    <span className="tx-badge installment-badge">
+                      {t.installmentIndex}/{t.installmentTotal}
+                    </span>
+                  )}
+                </div>
+                {t.description && <div className="tx-desc">{t.description}</div>}
+              </div>
+              <div className="tx-right">
+                <div className={`tx-amount ${t.type}`}>
+                  {t.type === 'income' ? '+' : '−'}
+                  {t.amount.toLocaleString('he-IL')} ₪
+                </div>
+                <div className="tx-actions">
+                  {groupId && (
+                    <button
+                      className="tx-delete-group"
+                      onClick={() => setPendingDelete({ kind: 'group', id: groupId, transaction: t })}
+                    >מחק מהמופע הזה והלאה</button>
+                  )}
+                  <button
+                    className="tx-delete"
+                    onClick={() => setPendingDelete({ kind: 'single', id: t.id })}
+                  >✕</button>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    ));
+  }
+
+  function renderFutureRulesGroup(rules: RecurringRule[], emptyText: string) {
+    if (rules.length === 0) {
+      return (
+        <div style={{ color: '#9ca3af', fontSize: '13px', textAlign: 'center', padding: '8px 0 16px' }}>
+          {emptyText}
+        </div>
+      );
+    }
+    return (
+      <div style={{ marginBottom: '16px' }}>
+        {rules.map((rule) => (
+          <div
+            key={rule.id}
+            className="tx-item expense"
+            style={{ cursor: 'pointer' }}
+            onClick={() => openRuleEdit(rule)}
+          >
+            <div className="tx-icon-wrap">
+              <span className="tx-icon">{getRuleIcon(rule, categories)}</span>
+            </div>
+            <div className="tx-info">
+              <div className="tx-category">
+                {rule.categoryLabel}
+                {rule.subcategoryLabel && <span className="tx-sub"> · {rule.subcategoryLabel}</span>}
+              </div>
+              <div className="tx-badges">
+                <span style={{ fontSize: '11px', background: '#ede9fe', color: '#7c3aed', borderRadius: '6px', padding: '2px 6px', fontWeight: 600 }}>חודשי</span>
+              </div>
+              {rule.description && <div className="tx-desc">{rule.description}</div>}
+            </div>
+            <div className="tx-right">
+              <div className="tx-amount expense">
+                −{rule.amount.toLocaleString('he-IL')} ₪
+              </div>
+              <div className="tx-actions">
+                <button
+                  className="tx-delete"
+                  onClick={(e) => { e.stopPropagation(); setPendingDelete({ kind: 'recurring-rule', id: rule.id }); }}
+                >✕</button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   if (filter === 'future') {
     return (
       <div className="history-container">
@@ -562,124 +722,32 @@ export default function TransactionList({
             תשלומים עתידיים
           </div>
 
-          {futureTransactions.length === 0 ? (
-            <div style={{ color: '#9ca3af', fontSize: '13px', textAlign: 'center', padding: '12px 0 20px' }}>
-              אין תשלומים עתידיים
-            </div>
-          ) : (
-            futureByMonth.map(([month, items]) => (
-              <div key={month} style={{ marginBottom: '16px' }}>
-                <div style={{
-                  fontSize: '12px', fontWeight: 600, color: '#6b7280',
-                  marginBottom: '6px', padding: '0 2px',
-                  textTransform: 'uppercase',
-                }}>
-                  {fmtMonthHe(month)}
-                </div>
-                {items.map((t) => {
-                  const groupId = t.installmentGroupId ?? t.recurrenceGroupId;
-                  const isInstallment = t.installmentTotal && t.installmentTotal > 1;
-                  return (
-                    <div
-                      key={t.id}
-                      className={`tx-item ${t.type}${lp.pressingId === t.id ? ' tx-pressing' : ''}`}
-                      onPointerDown={(e) => {
-                        if ((e.target as HTMLElement).closest('button')) return;
-                        lp.start(t.id, () => openEdit(t));
-                      }}
-                      onPointerUp={() => lp.cancel()}
-                      onPointerCancel={() => lp.cancel()}
-                      onPointerLeave={() => lp.cancel()}
-                      onContextMenu={(e) => e.preventDefault()}
-                    >
-                      <div className="tx-icon-wrap">
-                        <span className="tx-icon">{getDisplayIcon(t, categories)}</span>
-                      </div>
-                      <div className="tx-info">
-                        <div className="tx-category">
-                          {t.categoryLabel}
-                          {t.subcategoryLabel && <span className="tx-sub"> · {t.subcategoryLabel}</span>}
-                        </div>
-                        <div className="tx-badges">
-                          {isInstallment && (
-                            <span className="tx-badge installment-badge">
-                              {t.installmentIndex}/{t.installmentTotal}
-                            </span>
-                          )}
-                        </div>
-                        {t.description && <div className="tx-desc">{t.description}</div>}
-                      </div>
-                      <div className="tx-right">
-                        <div className={`tx-amount ${t.type}`}>
-                          {t.type === 'income' ? '+' : '−'}
-                          {t.amount.toLocaleString('he-IL')} ₪
-                        </div>
-                        <div className="tx-actions">
-                          {groupId && (
-                            <button
-                              className="tx-delete-group"
-                              onClick={() => setPendingDelete({ kind: 'group', id: groupId, transaction: t })}
-                            >מחק מהמופע הזה והלאה</button>
-                          )}
-                          <button
-                            className="tx-delete"
-                            onClick={() => setPendingDelete({ kind: 'single', id: t.id })}
-                          >✕</button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ))
-          )}
+          <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#4b5563', margin: '4px 0 6px' }}>
+            הוצאות דיור
+          </div>
+          {renderFuturePaymentsGroup(futureHousingByMonth, 'אין תשלומים עתידיים בדיור')}
+
+          <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#4b5563', margin: '4px 0 6px' }}>
+            הוצאות אישיות
+          </div>
+          {renderFuturePaymentsGroup(futurePersonalByMonth, 'אין תשלומים עתידיים אישיים')}
 
           {/* Section 2: חיובים קבועים */}
           <div style={{ fontSize: '13px', fontWeight: 700, color: '#374151', margin: '16px 0 8px', paddingTop: '4px', borderTop: '1px solid #f3f4f6' }}>
             חיובים קבועים
           </div>
 
-          {futureRecurringRules.length === 0 ? (
-            <div style={{ color: '#9ca3af', fontSize: '13px', textAlign: 'center', padding: '12px 0 20px' }}>
-              אין חיובים קבועים פעילים
-            </div>
-          ) : (
-            <div style={{ paddingBottom: '24px' }}>
-              {futureRecurringRules.map((rule) => (
-                <div
-                  key={rule.id}
-                  className="tx-item expense"
-                  style={{ cursor: 'pointer' }}
-                  onClick={() => openRuleEdit(rule)}
-                >
-                  <div className="tx-icon-wrap">
-                    <span className="tx-icon">{getRuleIcon(rule, categories)}</span>
-                  </div>
-                  <div className="tx-info">
-                    <div className="tx-category">
-                      {rule.categoryLabel}
-                      {rule.subcategoryLabel && <span className="tx-sub"> · {rule.subcategoryLabel}</span>}
-                    </div>
-                    <div className="tx-badges">
-                      <span style={{ fontSize: '11px', background: '#ede9fe', color: '#7c3aed', borderRadius: '6px', padding: '2px 6px', fontWeight: 600 }}>חודשי</span>
-                    </div>
-                    {rule.description && <div className="tx-desc">{rule.description}</div>}
-                  </div>
-                  <div className="tx-right">
-                    <div className="tx-amount expense">
-                      −{rule.amount.toLocaleString('he-IL')} ₪
-                    </div>
-                    <div className="tx-actions">
-                      <button
-                        className="tx-delete"
-                        onClick={(e) => { e.stopPropagation(); setPendingDelete({ kind: 'recurring-rule', id: rule.id }); }}
-                      >✕</button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#4b5563', margin: '4px 0 6px' }}>
+            הוצאות דיור
+          </div>
+          {renderFutureRulesGroup(futureHousingRecurringRules, 'אין חיובים קבועים בדיור')}
+
+          <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#4b5563', margin: '4px 0 6px' }}>
+            הוצאות אישיות
+          </div>
+          <div style={{ paddingBottom: '24px' }}>
+            {renderFutureRulesGroup(futurePersonalRecurringRules, 'אין חיובים קבועים אישיים')}
+          </div>
         </div>
 
         {/* Delete confirms */}
