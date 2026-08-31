@@ -8,10 +8,17 @@ function buildCategories(catRows: any[], subRows: any[]): Category[] {
     .filter((c) => !c.is_archived)
     .sort((a, b) => a.sort_order - b.sort_order)
     .map((c) => {
-      const subs = subRows
+      let subs = subRows
         .filter((s) => s.category_id === c.id && !s.is_archived)
         .sort((a, b) => a.sort_order - b.sort_order)
         .map((s) => ({ id: String(s.id), numericId: s.id as number, label: s.label as string, icon: s.icon as string }));
+      // "כלל הוצאות הבית" must render last so it sits at the visual far-left in the RTL chip row.
+      if (c.label === 'דיור') {
+        const homeExpenses = subs.filter((s) => s.label.includes('הוצאות הבית'));
+        if (homeExpenses.length) {
+          subs = [...subs.filter((s) => !s.label.includes('הוצאות הבית')), ...homeExpenses];
+        }
+      }
       const defaultSub = subRows.find(
         (s) => s.category_id === c.id && s.is_default && !s.is_archived,
       );
