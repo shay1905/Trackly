@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { Category, Transaction, RecurringRule, NavFilters, TransactionType } from '../types';
 import ConfirmDialog from './ConfirmDialog';
 import { useLongPress } from '../hooks/useLongPress';
+import { resolveCategory } from '../utils/resolveCategory';
 
 function getDisplayIcon(t: Transaction, categories: Category[]): string {
   const cat = categories.find((c) => c.numericId === t.categoryNumericId);
@@ -25,6 +26,25 @@ function getRuleIcon(rule: RecurringRule, categories: Category[]): string {
     if (cat.icon) return cat.icon;
   }
   return '🏷️';
+}
+
+// Category / subcategory text, always resolved LIVE from the categories tree so a
+// rename or a subcategory deletion shows up here immediately (the stored
+// t.categoryLabel / t.subcategoryLabel are frozen copies and go stale).
+function CategoryText({
+  refLike,
+  categories,
+}: {
+  refLike: Transaction | RecurringRule;
+  categories: Category[];
+}) {
+  const r = resolveCategory(refLike, categories);
+  return (
+    <>
+      {r.categoryLabel}
+      {r.subcategoryLabel && <span className="tx-sub"> · {r.subcategoryLabel}</span>}
+    </>
+  );
 }
 
 const HE_MONTHS = ['ינו׳','פבר׳','מרץ','אפר׳','מאי','יוני','יולי','אוג׳','ספט׳','אוק׳','נוב׳','דצמ׳'];
@@ -72,7 +92,8 @@ function isHousingLabel(label: string): boolean {
 }
 
 // Category filter chips: pin these labels first (in this order), keep the rest in their existing order.
-const PRIORITY_CAT_LABELS = ['דיור', 'מינויים', 'בריאות'];
+// NOTE: matched against the LIVE category label — keep in sync if a pinned category is renamed.
+const PRIORITY_CAT_LABELS = ['דיור', 'SaaS', 'בריאות'];
 
 function sortCatsByPriority<T extends { label: string }>(cats: T[]): T[] {
   const priority = PRIORITY_CAT_LABELS
@@ -235,7 +256,7 @@ export default function TransactionList({
       if (t.categoryNumericId != null && !seen.has(t.categoryNumericId)) {
         seen.add(t.categoryNumericId);
         const cat = categories.find((c) => c.numericId === t.categoryNumericId);
-        result.push({ numericId: t.categoryNumericId, label: t.categoryLabel, icon: cat?.icon ?? '🏷️' });
+        result.push({ numericId: t.categoryNumericId, label: cat?.label ?? t.categoryLabel, icon: cat?.icon ?? '🏷️' });
       }
     }
     return sortCatsByPriority(result);
@@ -247,10 +268,13 @@ export default function TransactionList({
     const result: { numericId: number; label: string; icon: string }[] = [];
     for (const t of transactions) {
       if (t.categoryNumericId === selectedCatId && t.subcategoryNumericId != null && !seen.has(t.subcategoryNumericId)) {
-        seen.add(t.subcategoryNumericId);
         const cat = categories.find((c) => c.numericId === t.categoryNumericId);
         const sub = cat?.subcategories.find((s) => s.numericId === t.subcategoryNumericId);
-        result.push({ numericId: t.subcategoryNumericId, label: t.subcategoryLabel ?? '', icon: sub?.icon ?? '🏷️' });
+        // Skip subcategories that no longer exist — a deleted subcategory must not
+        // linger in the filter bar.
+        if (!sub) continue;
+        seen.add(t.subcategoryNumericId);
+        result.push({ numericId: t.subcategoryNumericId, label: sub.label, icon: sub.icon });
       }
     }
     return result;
@@ -291,6 +315,13 @@ export default function TransactionList({
   const currentPastGroups = groupByDate(currentPastFiltered);
   const futureThisMonthGroups = groupByDate(futureThisMonthFiltered);
 
+  // Housing / personal split must key off the LIVE category name, not the frozen copy.
+  const liveCatLabel = useMemo(
+    () => (ref: { categoryNumericId: number | null; categoryLabel?: string }) =>
+      categories.find((c) => c.numericId === ref.categoryNumericId)?.label ?? ref.categoryLabel ?? '',
+    [categories],
+  );
+
   // Future installments — exclude rule-generated recurring transactions
   const futureTransactions = useMemo(
     () => transactions
@@ -299,23 +330,23 @@ export default function TransactionList({
     [transactions, today],
   );
   const futureHousingByMonth = useMemo(
-    () => groupByMonth(futureTransactions.filter((t) => isHousingLabel(t.categoryLabel))),
-    [futureTransactions],
+    () => groupByMonth(futureTransactions.filter((t) => isHousingLabel(liveCatLabel(t)))),
+    [futureTransactions, liveCatLabel],
   );
   const futurePersonalByMonth = useMemo(
-    () => groupByMonth(futureTransactions.filter((t) => !isHousingLabel(t.categoryLabel))),
-    [futureTransactions],
+    () => groupByMonth(futureTransactions.filter((t) => !isHousingLabel(liveCatLabel(t)))),
+    [futureTransactions, liveCatLabel],
   );
 
   // Show all active recurring rules — they persist until explicitly cancelled.
   const futureRecurringRules = useMemo(() => recurringRules, [recurringRules]);
   const futureHousingRecurringRules = useMemo(
-    () => futureRecurringRules.filter((r) => isHousingLabel(r.categoryLabel)),
-    [futureRecurringRules],
+    () => futureRecurringRules.filter((r) => isHousingLabel(liveCatLabel(r))),
+    [futureRecurringRules, liveCatLabel],
   );
   const futurePersonalRecurringRules = useMemo(
-    () => futureRecurringRules.filter((r) => !isHousingLabel(r.categoryLabel)),
-    [futureRecurringRules],
+    () => futureRecurringRules.filter((r) => !isHousingLabel(liveCatLabel(r))),
+    [futureRecurringRules, liveCatLabel],
   );
 
   // ── Delete ──────────────────────────────────────────────────────────────
@@ -342,13 +373,14 @@ export default function TransactionList({
   // ── Edit transaction ─────────────────────────────────────────────────────
   function openEdit(t: Transaction) {
     const cat = categories.find((c) => c.numericId === t.categoryNumericId);
-    let subNumId = t.subcategoryNumericId ?? null;
-    if (subNumId == null && cat && cat.subcategories.length > 0) {
-      const defSub = cat.defaultSubcategoryId
-        ? cat.subcategories.find((s) => s.id === cat.defaultSubcategoryId)
-        : cat.subcategories[0];
-      subNumId = defSub?.numericId ?? null;
-    }
+    // Keep the subcategory only if it still exists. A missing / deleted reference
+    // becomes "no subcategory" — we never auto-substitute another one, so editing
+    // an old transaction can't silently move it to a different subcategory.
+    const subNumId =
+      t.subcategoryNumericId != null &&
+      cat?.subcategories.some((s) => s.numericId === t.subcategoryNumericId)
+        ? t.subcategoryNumericId
+        : null;
     setEditingTx(t);
     setEditState({
       amount: String(t.amount),
@@ -382,7 +414,8 @@ export default function TransactionList({
       amount,
       categoryNumericId: editState.catNumId,
       categoryLabel: cat?.label ?? editingTx.categoryLabel,
-      subcategoryNumericId: editState.subNumId ?? null,
+      // Only persist a subcategory id when it maps to a real subcategory.
+      subcategoryNumericId: sub?.numericId ?? null,
       subcategoryLabel: sub?.label ?? '',
       description: editState.description,
       date: editState.date,
@@ -436,11 +469,17 @@ export default function TransactionList({
 
   // ── Edit recurring rule ──────────────────────────────────────────────────
   function openRuleEdit(rule: RecurringRule) {
+    const cat = categories.find((c) => c.numericId === rule.categoryNumericId);
+    const subNumId =
+      rule.subcategoryNumericId != null &&
+      cat?.subcategories.some((s) => s.numericId === rule.subcategoryNumericId)
+        ? rule.subcategoryNumericId
+        : null;
     setEditingRule(rule);
     setEditRuleState({
       amount: String(rule.amount),
       catNumId: rule.categoryNumericId,
-      subNumId: rule.subcategoryNumericId,
+      subNumId,
       description: rule.description,
       startDate: rule.startDate,
     });
@@ -467,7 +506,7 @@ export default function TransactionList({
       amount,
       categoryNumericId: editRuleState.catNumId,
       categoryLabel: cat?.label ?? editingRule.categoryLabel,
-      subcategoryNumericId: editRuleState.subNumId ?? null,
+      subcategoryNumericId: sub?.numericId ?? null,
       subcategoryLabel: sub?.label ?? '',
       description: editRuleState.description,
       startDate: editRuleState.startDate,
@@ -534,8 +573,7 @@ export default function TransactionList({
         </div>
         <div className="tx-info">
           <div className="tx-category">
-            {t.categoryLabel}
-            {t.subcategoryLabel && <span className="tx-sub"> · {t.subcategoryLabel}</span>}
+            <CategoryText refLike={t} categories={categories} />
           </div>
           <div className="tx-badges">
             {ruleTx && (
@@ -617,8 +655,7 @@ export default function TransactionList({
               </div>
               <div className="tx-info">
                 <div className="tx-category">
-                  {t.categoryLabel}
-                  {t.subcategoryLabel && <span className="tx-sub"> · {t.subcategoryLabel}</span>}
+                  <CategoryText refLike={t} categories={categories} />
                 </div>
                 <div className="tx-badges">
                   {isInstallment && (
@@ -676,8 +713,7 @@ export default function TransactionList({
             </div>
             <div className="tx-info">
               <div className="tx-category">
-                {rule.categoryLabel}
-                {rule.subcategoryLabel && <span className="tx-sub"> · {rule.subcategoryLabel}</span>}
+                <CategoryText refLike={rule} categories={categories} />
               </div>
               <div className="tx-badges">
                 <span style={{ fontSize: '11px', background: '#ede9fe', color: '#7c3aed', borderRadius: '6px', padding: '2px 6px', fontWeight: 600 }}>חודשי</span>
@@ -800,7 +836,7 @@ export default function TransactionList({
             <div style={{ width: '40px', height: '4px', background: '#e5e7eb', borderRadius: '2px', margin: '0 auto 16px' }} />
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', marginBottom: '20px' }}>
               <span style={{ fontSize: '32px', lineHeight: '1' }}>{getDisplayIcon(editingTx, categories)}</span>
-              <div style={{ fontSize: '15px', fontWeight: 700, color: '#1f2937' }}>{editingTx.categoryLabel}{editingTx.subcategoryLabel ? ` · ${editingTx.subcategoryLabel}` : ''}</div>
+              <div style={{ fontSize: '15px', fontWeight: 700, color: '#1f2937' }}><CategoryText refLike={editingTx} categories={categories} /></div>
               <div style={{ fontSize: '22px', fontWeight: 700, color: editingTx.type === 'expense' ? '#dc2626' : '#16a34a' }}>
                 {editingTx.type === 'income' ? '+' : '−'}{editingTx.amount.toLocaleString('he-IL')} ₪
               </div>
@@ -881,6 +917,7 @@ export default function TransactionList({
                   value={editState.subNumId ?? ''}
                   onChange={(e) => { const numId = e.target.value ? Number(e.target.value) : null; setEditState((s) => s && ({ ...s, subNumId: numId })); }}
                 >
+                  <option value="">ללא תת-קטגוריה</option>
                   {editSubs.map((s) => (
                     <option key={s.numericId} value={s.numericId ?? ''}>{s.icon} {s.label}</option>
                   ))}
@@ -988,6 +1025,7 @@ export default function TransactionList({
                   value={editRuleState.subNumId ?? ''}
                   onChange={(e) => { const numId = e.target.value ? Number(e.target.value) : null; setEditRuleState((s) => s && ({ ...s, subNumId: numId })); }}
                 >
+                  <option value="">ללא תת-קטגוריה</option>
                   {editRuleSubs.map((s) => (
                     <option key={s.numericId} value={s.numericId ?? ''}>{s.icon} {s.label}</option>
                   ))}

@@ -122,6 +122,16 @@ export function useTransactions() {
     setTransactions((prev) => [...itemsWithCreatedDate, ...prev]);
   }
 
+  // Mirror useCategories.archiveSubcategory's DB scrub in local state so the
+  // Transactions / Reports screens drop the deleted subcategory immediately.
+  function detachSubcategory(subcategoryNumericId: number) {
+    setTransactions((prev) => prev.map((t) =>
+      t.subcategoryNumericId === subcategoryNumericId
+        ? { ...t, subcategoryNumericId: null, subcategoryLabel: '' }
+        : t,
+    ));
+  }
+
   async function removeTransaction(id: string) {
     const { error } = await supabase
       .from('transactions')
@@ -317,6 +327,7 @@ export function useTransactions() {
     loaded,
     deletedRecurringMonthKeys,
     addTransactions,
+    detachSubcategory,
     removeTransaction,
     removeGroup,
     updateTransaction,

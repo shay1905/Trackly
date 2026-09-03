@@ -519,7 +519,6 @@ input  { font-family: inherit; }
   border-radius: var(--radius-sm);
   border: 1.5px solid var(--border);
   flex-shrink: 0;
-  caret-color: transparent;
   direction: ltr;
   padding: 0;
   cursor: text;
@@ -1092,12 +1091,12 @@ input.field-input[type="date"]::-webkit-calendar-picker-indicator {
   border-radius: var(--radius-sm);
   border: 1.5px solid var(--border);
   flex-shrink: 0;
-  caret-color: transparent;
   direction: ltr;
   padding: 0;
   cursor: text;
 }
 .inferred-icon-preview:focus { outline: none; border-color: var(--accent); }
+.inferred-icon-preview::placeholder { font-size: 20px; color: var(--border-2); }
 
 /* Section selector chips (new category modal) */
 .section-chips { display: flex; gap: 8px; }

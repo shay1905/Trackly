@@ -187,8 +187,8 @@ export default function EntryScreen() {
     return () => { el.removeEventListener('scroll', onScroll); clearTimeout(timer); };
   }, []);
 
-  const { transactions, loaded: txLoaded, deletedRecurringMonthKeys, addTransactions, removeTransaction, removeGroup, updateTransaction, updateTransactionGroup, updateInstallmentDates } = useTransactions();
-  const { rules: recurringRules, loaded: rulesLoaded, addRecurringRule, updateRecurringRule, deactivateRecurringRule } = useRecurringRules();
+  const { transactions, loaded: txLoaded, deletedRecurringMonthKeys, addTransactions, detachSubcategory: detachSubcategoryFromTx, removeTransaction, removeGroup, updateTransaction, updateTransactionGroup, updateInstallmentDates } = useTransactions();
+  const { rules: recurringRules, loaded: rulesLoaded, addRecurringRule, updateRecurringRule, deactivateRecurringRule, detachSubcategory: detachSubcategoryFromRules } = useRecurringRules();
 
   const syncedRef = useRef(false);
   useEffect(() => {
@@ -425,7 +425,16 @@ export default function EntryScreen() {
       }
     } else {
       const isDeletingDefault = selectedCategory?.defaultSubcategoryId === deleteTarget.id;
+      const deletedSubNumericId =
+        selectedCategory?.subcategories.find((s) => s.id === deleteTarget.id)?.numericId
+        ?? Number(deleteTarget.id);
       archiveSubcategory(deleteTarget.id);
+      // Detach the subcategory from existing transactions / rules in local state
+      // (useCategories already scrubbed the DB) so every screen updates now.
+      if (!Number.isNaN(deletedSubNumericId)) {
+        detachSubcategoryFromTx(deletedSubNumericId);
+        detachSubcategoryFromRules(deletedSubNumericId);
+      }
       const remaining = (selectedCategory?.subcategories ?? []).filter((s) => s.id !== deleteTarget.id);
       if (isDeletingDefault) {
         if (remaining.length > 0) {
@@ -440,7 +449,7 @@ export default function EntryScreen() {
     }
     setDeleteTarget(null);
     setEditMode(false);
-  }, [archiveCategory, archiveSubcategory, deleteTarget, selectedCategory, setDefaultSubcategory, form.categoryId, form.subcategoryId, form.type]);
+  }, [archiveCategory, archiveSubcategory, detachSubcategoryFromTx, detachSubcategoryFromRules, deleteTarget, selectedCategory, setDefaultSubcategory, form.categoryId, form.subcategoryId, form.type]);
 
   const setTransactionMode = useCallback((mode: TransactionMode) => {
     setForm((f) => ({

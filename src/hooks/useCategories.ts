@@ -107,6 +107,20 @@ export function useCategories() {
   function archiveSubcategory(id: string) {
     void supabase.from('subcategories').update({ is_archived: true, is_deleted: true }).eq('id', id)
       .then(({ error }) => { if (error) console.error('Failed archiving subcategory:', error); });
+    // Detach the deleted subcategory from every transaction / recurring rule that
+    // referenced it. Default behaviour (see spec): remove the link (NULL) — a
+    // deleted subcategory must NEVER be silently swapped for another one.
+    const numericId = Number(id);
+    if (!Number.isNaN(numericId)) {
+      void supabase.from('transactions')
+        .update({ subcategory_id: null, subcategory_label: null })
+        .eq('subcategory_id', numericId)
+        .then(({ error }) => { if (error) console.error('Failed detaching subcategory from transactions:', error); });
+      void supabase.from('recurring_rules')
+        .update({ subcategory_id: null, subcategory_label: null })
+        .eq('subcategory_id', numericId)
+        .then(({ error }) => { if (error) console.error('Failed detaching subcategory from recurring rules:', error); });
+    }
     setCategories((prev) => prev.map((c) => ({
       ...c,
       subcategories: (c.subcategories || []).filter((s) => s.id !== id),

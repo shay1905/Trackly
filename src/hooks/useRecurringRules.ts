@@ -128,6 +128,14 @@ export function useRecurringRules() {
     setRules((prev) => prev.map((r) => r.id === rule.id ? rule : r));
   }
 
+  function detachSubcategory(subcategoryNumericId: number) {
+    setRules((prev) => prev.map((r) =>
+      r.subcategoryNumericId === subcategoryNumericId
+        ? { ...r, subcategoryNumericId: null, subcategoryLabel: '' }
+        : r,
+    ));
+  }
+
   async function deactivateRecurringRule(id: string) {
     setRules((prev) => prev.filter((r) => r.id !== id));
     const { error } = await supabase
@@ -137,5 +145,5 @@ export function useRecurringRules() {
     if (error) { console.error('Failed deactivating recurring rule:', error); void loadRecurringRules(); }
   }
 
-  return { rules, loaded, addRecurringRule, updateRecurringRule, deactivateRecurringRule };
+  return { rules, loaded, addRecurringRule, updateRecurringRule, deactivateRecurringRule, detachSubcategory };
 }

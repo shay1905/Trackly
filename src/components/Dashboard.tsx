@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Transaction, Category, RecurringRule, NavFilters } from '../types';
 import { currentMonthStr, getStartDate as getStartDateFor, filterToFullMonths, computeSavingsRate } from '../utils/reportMath';
+import { resolveCategory } from '../utils/resolveCategory';
 
 interface Props {
   transactions: Transaction[];
@@ -73,63 +74,69 @@ function buildCatRows(
   monthCount: number,
   categories: Category[],
 ): CatRow[] {
-  // Group strictly by categoryLabel so that the same category name is always
-  // one row, even when different transactions recorded different numericIds for
-  // the same logical category (common when data spans multiple months).
-  type CatEntry = { label: string; numericId: number | null; amount: number };
-  type SubEntry = { label: string; numericId: number | null; amount: number };
+  // Identity comes from the LIVE categories tree (by numeric id), never from the
+  // frozen categoryLabel copy stored on each transaction — so a rename merges
+  // under the new name and a deleted subcategory disappears from the report.
+  type CatEntry = { key: string; label: string; icon: string; numericId: number | null; amount: number };
+  type SubEntry = { key: string; label: string; icon: string; numericId: number | null; amount: number };
 
   const catMeta    = new Map<string, CatEntry>();
   const subcatMeta = new Map<string, Map<string, SubEntry>>();
 
   txList.filter((t) => t.type === type).forEach((t) => {
-    // Group by label: all same-category transactions merge into one row, even
-    // across months or when categoryNumericId differs or is null on older records.
-    // Expense/income separation is guaranteed by the type filter above — the two
-    // buildCatRows calls (expense / income) never share the same catMeta map.
-    const ck = t.categoryLabel;
-    if (!catMeta.has(ck)) {
-      // Resolve numericId type-aware so expense "מתנות" never picks up income "מתנות"'s id.
-      const numericId = t.categoryNumericId
-        ?? categories.find((c) => c.label === t.categoryLabel && (c.type === type || c.type === 'both'))?.numericId
-        ?? null;
-      catMeta.set(ck, { label: t.categoryLabel, numericId, amount: 0 });
-    }
-    catMeta.get(ck)!.amount += t.amount;
+    const r = resolveCategory(t, categories);
+    // Type-aware lookup so expense "מתנות" never picks up income "מתנות"'s id.
+    const catObj = t.categoryNumericId != null
+      ? categories.find((c) => c.numericId === t.categoryNumericId)
+      : categories.find((c) => c.label === r.categoryLabel && (c.type === type || c.type === 'both'));
+    const catKey = catObj?.numericId != null ? `id:${catObj.numericId}` : `label:${r.categoryLabel}`;
 
-    if (t.subcategoryLabel) {
-      const sk = t.subcategoryLabel;
-      if (!subcatMeta.has(ck)) subcatMeta.set(ck, new Map());
-      const sm = subcatMeta.get(ck)!;
-      if (!sm.has(sk)) sm.set(sk, { label: t.subcategoryLabel, numericId: t.subcategoryNumericId ?? null, amount: 0 });
-      sm.get(sk)!.amount += t.amount;
+    if (!catMeta.has(catKey)) {
+      catMeta.set(catKey, {
+        key: catKey,
+        label: catObj?.label ?? r.categoryLabel,
+        icon: catObj?.icon ?? '',
+        numericId: catObj?.numericId ?? t.categoryNumericId ?? null,
+        amount: 0,
+      });
+    }
+    catMeta.get(catKey)!.amount += t.amount;
+
+    // A deleted subcategory still counts toward its category total but is never
+    // shown as its own row (r.subcategoryMissing).
+    if (!r.subcategoryMissing && r.subcategoryLabel) {
+      if (!subcatMeta.has(catKey)) subcatMeta.set(catKey, new Map());
+      const sm = subcatMeta.get(catKey)!;
+      const subKey = t.subcategoryNumericId != null ? `id:${t.subcategoryNumericId}` : `label:${r.subcategoryLabel}`;
+      if (!sm.has(subKey)) {
+        sm.set(subKey, {
+          key: subKey,
+          label: r.subcategoryLabel,
+          icon: r.subcategoryIcon || (catObj?.icon ?? ''),
+          numericId: t.subcategoryNumericId ?? null,
+          amount: 0,
+        });
+      }
+      sm.get(subKey)!.amount += t.amount;
     }
   });
 
   return Array.from(catMeta.values())
-    .map(({ label, numericId, amount: catTotal }) => {
-      const catObj  = categories.find((c) =>
-        numericId != null
-          ? c.numericId === numericId
-          : c.label === label && (c.type === type || c.type === 'both'),
-      );
-      const catIcon = catObj?.icon ?? '';
-      return {
-        label, icon: catIcon,
-        avg: catTotal / monthCount,
-        pct: total > 0 ? (catTotal / total) * 100 : 0,
-        numericId: numericId ?? catObj?.numericId ?? null,
-        subcats: Array.from((subcatMeta.get(label) ?? new Map()).values())
-          .map(({ label: sl, numericId: subNumericId, amount: sa }) => ({
-            label: sl,
-            icon: catObj?.subcategories.find((s) => s.label === sl)?.icon || catIcon,
-            avg: sa / monthCount,
-            pct: catTotal > 0 ? (sa / catTotal) * 100 : 0,
-            numericId: subNumericId,
-          }))
-          .sort((a, b) => b.avg - a.avg),
-      };
-    })
+    .map(({ key, label, icon, numericId, amount: catTotal }) => ({
+      label, icon,
+      avg: catTotal / monthCount,
+      pct: total > 0 ? (catTotal / total) * 100 : 0,
+      numericId,
+      subcats: Array.from((subcatMeta.get(key) ?? new Map<string, SubEntry>()).values())
+        .map(({ label: sl, icon: si, numericId: subNumericId, amount: sa }) => ({
+          label: sl,
+          icon: si || icon,
+          avg: sa / monthCount,
+          pct: catTotal > 0 ? (sa / catTotal) * 100 : 0,
+          numericId: subNumericId,
+        }))
+        .sort((a, b) => b.avg - a.avg),
+    }))
     .sort((a, b) => b.avg - a.avg);
 }
 

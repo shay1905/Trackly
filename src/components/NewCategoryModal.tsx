@@ -34,13 +34,11 @@ export default function NewCategoryModal({ defaultType, onSave, onClose }: Props
 
   const handleIconChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
-    if (!val) {
-      setIconUserSet(false);
-      setIcon(inferIcon(label));
-    } else {
-      setIcon(extractEmoji(val) || val);
-      setIconUserSet(true);
-    }
+    // Once the user touches the icon field, stop auto-inferring — including when
+    // they clear it. Clearing used to instantly snap back to the inferred icon,
+    // which made the field feel locked.
+    setIconUserSet(true);
+    setIcon(val ? (extractEmoji(val) || val) : '');
   };
 
   const handleSave = () => {
@@ -49,7 +47,7 @@ export default function NewCategoryModal({ defaultType, onSave, onClose }: Props
     onSave({
       id: `custom-cat-${ts}`,
       label: label.trim(),
-      icon: icon || '🏷️',
+      icon: icon || inferIcon(label) || '🏷️',
       isQuick: type === 'income' || section === 'quick',
       subcategories: [],
       type,
@@ -71,6 +69,8 @@ export default function NewCategoryModal({ defaultType, onSave, onClose }: Props
               inputMode="text"
               value={icon}
               onChange={handleIconChange}
+              onKeyDown={(e) => { if (e.key === 'Backspace') { setIcon(''); setIconUserSet(true); e.preventDefault(); } }}
+              placeholder="🏷️"
               aria-label="אייקון"
             />
             <input
@@ -81,7 +81,7 @@ export default function NewCategoryModal({ defaultType, onSave, onClose }: Props
               onChange={(e) => { setLabel(e.target.value); setError(''); }}
             />
           </div>
-          <p className="field-hint">האייקון נבחר אוטומטית — אפשר לשנות ידנית</p>
+          <p className="field-hint">נבחר אוטומטית לפי השם — טאפ על האייקון כדי לבחור אמוג׳י אחר</p>
         </div>
 
         <div className="modal-field">
