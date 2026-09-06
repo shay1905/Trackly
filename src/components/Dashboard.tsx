@@ -10,15 +10,16 @@ interface Props {
   onNavigate?: (filters: NavFilters) => void;
 }
 
-type TimeFilter = '1m' | '3m' | '6m' | '12m' | 'all';
+type TimeFilter = '1m' | '3m' | '6m' | '12m' | 'all' | 'custom';
 type TabType = 'monthly' | 'general';
 
 const TIME_FILTERS: { key: TimeFilter; label: string }[] = [
-  { key: '1m',  label: 'החודש' },
-  { key: '3m',  label: '3 חודשים' },
-  { key: '6m',  label: '6 חודשים' },
-  { key: '12m', label: '12 חודשים' },
-  { key: 'all', label: 'הכל' },
+  { key: '1m',     label: 'החודש' },
+  { key: '3m',     label: '3 חודשים' },
+  { key: '6m',     label: '6 חודשים' },
+  { key: '12m',    label: '12 חודשים' },
+  { key: 'all',    label: 'הכל' },
+  { key: 'custom', label: 'טווח מותאם' },
 ];
 
 const HE_MONTHS = ['ינו׳','פבר׳','מרץ','אפר׳','מאי','יוני','יולי','אוג׳','ספט׳','אוק׳','נוב׳','דצמ׳'];
@@ -389,14 +390,61 @@ function buildVirtualItems(rules: RecurringRule[], months: string[]): Transactio
   );
 }
 
+// ── Compact single-month stepper (used by the custom range selector) ─────
+function MonthStepper({ label, value, min, max, onChange }: {
+  label: string;
+  value: string;
+  min: string;
+  max: string;
+  onChange: (v: string) => void;
+}) {
+  const canPrev = value > min;
+  const canNext = value < max;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '2px', direction: 'ltr' }}>
+      <button
+        style={{ ...NAV_BTN, fontSize: '18px', color: canPrev ? '#6b7280' : '#d1d5db', cursor: canPrev ? 'pointer' : 'default' }}
+        onClick={() => canPrev && onChange(prevMonth(value))}
+      >
+        ‹
+      </button>
+      <span style={{ fontSize: '13px', fontWeight: 500, color: '#374151', background: '#f3f4f6', borderRadius: '20px', padding: '4px 12px', whiteSpace: 'nowrap', direction: 'rtl' }}>
+        <span style={{ color: '#9ca3af', fontWeight: 400, marginLeft: '5px' }}>{label}</span>
+        {fmtMonthHe(value)}
+      </span>
+      <button
+        style={{ ...NAV_BTN, fontSize: '18px', color: canNext ? '#6b7280' : '#d1d5db', cursor: canNext ? 'pointer' : 'default' }}
+        onClick={() => canNext && onChange(nextMonth(value))}
+      >
+        ›
+      </button>
+    </div>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────
 export default function Dashboard({ transactions, categories, recurringRules, onNavigate }: Props) {
   const [activeTab,        setActiveTab]        = useState<TabType>('monthly');
   const [timeFilter,       setTimeFilter]       = useState<TimeFilter>('1m');
   const [specificMonth,    setSpecificMonth]    = useState<string>(currentMonthStr());
+  const [customStart,      setCustomStart]      = useState<string>(() => getStartDateFor(5)!.slice(0, 7));
+  const [customEnd,        setCustomEnd]        = useState<string>(() => currentMonthStr());
   const [expandedExpCat,   setExpandedExpCat]   = useState<string | null>(null);
   const [expandedIncCat,   setExpandedIncCat]   = useState<string | null>(null);
   const [selectedTrendIdx, setSelectedTrendIdx] = useState<number | null>(null);
+
+  // Normalised custom range bounds (YYYY-MM, inclusive) — always lo <= hi.
+  const cRangeLo = customStart <= customEnd ? customStart : customEnd;
+  const cRangeHi = customStart <= customEnd ? customEnd : customStart;
+
+  // Earliest month with any data — lower bound for the custom start stepper.
+  const earliestMonth = useMemo(() => {
+    const ms = [
+      ...transactions.map((t) => t.date.slice(0, 7)),
+      ...recurringRules.map((r) => r.startDate.slice(0, 7)),
+    ].sort();
+    return ms[0] ?? getStartDateFor(12)!.slice(0, 7);
+  }, [transactions, recurringRules]);
 
   const filtered = useMemo(() => {
     const cm = currentMonthStr();
@@ -420,6 +468,11 @@ export default function Dashboard({ transactions, categories, recurringRules, on
       base = transactions.filter((t) => !isRuleTx(t));
       const earliest = [...base.map((t) => t.date.slice(0, 7)), ...recurringRules.map((r) => r.startDate.slice(0, 7))].sort()[0] ?? cm;
       virtualMonths = getMonthsInRange(earliest, cm);
+    } else if (timeFilter === 'custom') {
+      const start = `${cRangeLo}-01`;
+      const endExclusive = `${nextMonth(cRangeHi)}-01`;
+      base = transactions.filter((t) => t.date >= start && t.date < endExclusive && !isRuleTx(t));
+      virtualMonths = getMonthsInRange(cRangeLo, cRangeHi);
     } else {
       const start = getStartDate(timeFilter)!;
       base = transactions.filter((t) => t.date >= start && !isRuleTx(t));
@@ -428,7 +481,7 @@ export default function Dashboard({ transactions, categories, recurringRules, on
 
     const virtual = buildVirtualItems(recurringRules, virtualMonths);
     return [...base, ...virtual];
-  }, [transactions, recurringRules, timeFilter, specificMonth]);
+  }, [transactions, recurringRules, timeFilter, specificMonth, cRangeLo, cRangeHi]);
 
   const income   = useMemo(() => filtered.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0), [filtered]);
   const expenses = useMemo(() => filtered.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0), [filtered]);
@@ -439,9 +492,10 @@ export default function Dashboard({ transactions, categories, recurringRules, on
     if (timeFilter === '3m')  return 3;
     if (timeFilter === '6m')  return 6;
     if (timeFilter === '12m') return 12;
+    if (timeFilter === 'custom') return getMonthsInRange(cRangeLo, cRangeHi).length;
     const months = new Set(filtered.map((t) => t.date.slice(0, 7)));
     return Math.max(months.size, 1);
-  }, [timeFilter, filtered]);
+  }, [timeFilter, filtered, cRangeLo, cRangeHi]);
 
   // For multi-month averages, exclude the current (partial) month so averages
   // are based only on complete calendar months. '1m' intentionally shows the
@@ -457,9 +511,15 @@ export default function Dashboard({ transactions, categories, recurringRules, on
   const savingsRate = useMemo(() => computeSavingsRate(filteredFull), [filteredFull]);
   const fullMonthCount = useMemo(() => {
     if (timeFilter === '1m') return 1;
+    // Custom range: divide by every complete month the user selected, even months
+    // with no transactions — that is what "monthly average over this range" means.
+    if (timeFilter === 'custom') {
+      const cm = currentMonthStr();
+      return Math.max(getMonthsInRange(cRangeLo, cRangeHi).filter((m) => m < cm).length, 1);
+    }
     const months = new Set(filteredFull.map((t) => t.date.slice(0, 7)));
     return Math.max(months.size, 1);
-  }, [timeFilter, filteredFull]);
+  }, [timeFilter, filteredFull, cRangeLo, cRangeHi]);
 
   const isMultiMonth    = monthCount > 1;
   const displayIncome   = isMultiMonth ? incomeFull   / fullMonthCount : income;
@@ -519,7 +579,10 @@ export default function Dashboard({ transactions, categories, recurringRules, on
     subNumericId,
     dateFilter: (timeFilter === '1m' ? 'this-month' : 'range') as 'this-month' | 'range',
     selectedMonth: specificMonth,
-    rangeStart: timeFilter === '1m' ? null : getStartDate(timeFilter),
+    rangeStart:
+      timeFilter === '1m' ? null
+      : timeFilter === 'custom' ? `${cRangeLo}-01`
+      : getStartDate(timeFilter),
   });
 
   const handleExpenseCatNavigate = (catNumericId: number | null, catLabel: string, subNumericId: number | null) => {
@@ -594,6 +657,26 @@ export default function Dashboard({ transactions, categories, recurringRules, on
               >
                 ›
               </button>
+            </div>
+          )}
+
+          {/* Custom month-range selector — only for 'טווח מותאם' */}
+          {timeFilter === 'custom' && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px 14px', flexWrap: 'wrap', padding: '2px 0 12px' }}>
+              <MonthStepper
+                label="מ־"
+                value={cRangeLo}
+                min={earliestMonth <= cRangeLo ? earliestMonth : cRangeLo}
+                max={cRangeHi}
+                onChange={setCustomStart}
+              />
+              <MonthStepper
+                label="עד"
+                value={cRangeHi}
+                min={cRangeLo}
+                max={today}
+                onChange={setCustomEnd}
+              />
             </div>
           )}
 
