@@ -92,4 +92,8 @@ export interface NavFilters {
   dateFilter: 'this-month' | 'range';
   selectedMonth: string;
   rangeStart: string | null;
+  // Inclusive last day of the range (YYYY-MM-DD). null = open-ended, i.e. up to
+  // (but not including) the current month — used by the predefined 3/6/12m filters.
+  // Set only for the custom month range so the drill-down matches the report total.
+  rangeEnd: string | null;
 }

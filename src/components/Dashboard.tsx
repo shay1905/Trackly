@@ -39,6 +39,12 @@ function fmtMonthHe(ym: string): string {
   return `${HE_MONTHS[m - 1]} ${y}`;
 }
 
+// Inclusive last calendar day (YYYY-MM-DD) of a YYYY-MM month.
+function lastDayOfMonth(ym: string): string {
+  const [y, m] = ym.split('-').map(Number);
+  return `${ym}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
+}
+
 function getStartDate(filter: TimeFilter): string | null {
   if (filter === 'all') return null;
   const monthsBack = filter === '3m' ? 3 : filter === '6m' ? 6 : 12;
@@ -583,6 +589,10 @@ export default function Dashboard({ transactions, categories, recurringRules, on
       timeFilter === '1m' ? null
       : timeFilter === 'custom' ? `${cRangeLo}-01`
       : getStartDate(timeFilter),
+    // Custom range has a fixed upper bound — pass it so the drill-down shows the
+    // exact same transactions that produced the report total. Predefined ranges
+    // stay open-ended (up to the current month).
+    rangeEnd: timeFilter === 'custom' ? lastDayOfMonth(cRangeHi) : null,
   });
 
   const handleExpenseCatNavigate = (catNumericId: number | null, catLabel: string, subNumericId: number | null) => {

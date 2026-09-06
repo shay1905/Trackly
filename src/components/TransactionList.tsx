@@ -206,6 +206,7 @@ export default function TransactionList({
   const [filter,          setFilter]          = useState<DateFilter>(() => navFilters?.dateFilter ?? 'this-month');
   const [selectedMonth,   setSelectedMonth]   = useState(() => navFilters?.selectedMonth ?? currentMonthStr());
   const [rangeStart,      setRangeStart]      = useState<string | null>(() => navFilters?.rangeStart ?? null);
+  const [rangeEnd,        setRangeEnd]        = useState<string | null>(() => navFilters?.rangeEnd ?? null);
   const [pendingDelete,   setPendingDelete]   = useState<PendingDelete | null>(null);
   const [pendingRuleCancel, setPendingRuleCancel] = useState<string | null>(null);
   const [search,          setSearch]          = useState('');
@@ -231,6 +232,7 @@ export default function TransactionList({
     filter !== 'this-month' ||
     selectedMonth !== thisMonth ||
     rangeStart !== null ||
+    rangeEnd !== null ||
     selectedCatId !== null ||
     selectedCatLabel !== null ||
     selectedSubId !== null ||
@@ -241,6 +243,7 @@ export default function TransactionList({
     setFilter('this-month');
     setSelectedMonth(thisMonth);
     setRangeStart(null);
+    setRangeEnd(null);
     setSelectedCatId(null);
     setSelectedCatLabel(null);
     setSelectedSubId(null);
@@ -288,7 +291,11 @@ export default function TransactionList({
         case 'until-today': return t.date <= today;
         case 'future':      return t.date > today;
         case 'range':
-          return (rangeStart === null || t.date >= rangeStart) && t.date.slice(0, 7) < thisMonth;
+          // rangeEnd set (custom month range): bound both ends inclusively so the
+          // drill-down matches the report total exactly. rangeEnd null (predefined
+          // 3/6/12m ranges): open-ended up to the current month, as before.
+          return (rangeStart === null || t.date >= rangeStart)
+            && (rangeEnd === null ? t.date.slice(0, 7) < thisMonth : t.date <= rangeEnd);
       }
     })
     .filter((t) => !search || t.description.toLowerCase().includes(search.toLowerCase()))
@@ -1082,7 +1089,7 @@ export default function TransactionList({
           <button
             key={f.value}
             className={`history-filter-btn${filter === f.value ? ' active' : ''}`}
-            onClick={() => { setFilter(f.value); setRangeStart(null); }}
+            onClick={() => { setFilter(f.value); setRangeStart(null); setRangeEnd(null); }}
             type="button"
           >
             {f.label}
