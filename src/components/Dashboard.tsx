@@ -59,12 +59,13 @@ const NAV_BTN: React.CSSProperties = {
 
 // ── Shared data type + builder ───────────────────────────────────────────
 type CatRow = {
+  groupKey: string;
   label: string;
   icon: string;
   avg: number;
   pct: number;
   numericId: number | null;
-  subcats: { label: string; icon: string; avg: number; pct: number; numericId: number | null }[];
+  subcats: { groupKey: string; label: string; icon: string; avg: number; pct: number; numericId: number | null }[];
 };
 
 function buildCatRows(
@@ -85,10 +86,16 @@ function buildCatRows(
 
   txList.filter((t) => t.type === type).forEach((t) => {
     const r = resolveCategory(t, categories);
-    // Type-aware lookup so expense "מתנות" never picks up income "מתנות"'s id.
-    const catObj = t.categoryNumericId != null
-      ? categories.find((c) => c.numericId === t.categoryNumericId)
-      : categories.find((c) => c.label === r.categoryLabel && (c.type === type || c.type === 'both'));
+    // Resolve every transaction to ONE canonical live category so a single
+    // category can never be split across several rows. Match the numeric id
+    // first (type-guarded, so an expense never lands on income "מתנות"), then
+    // fall back to a label+type match — a stale / removed / mis-linked id then
+    // still merges with its live-label siblings instead of forming a 2nd row.
+    const catObj =
+      (t.categoryNumericId != null
+        ? categories.find((c) => c.numericId === t.categoryNumericId && (c.type === type || c.type === 'both'))
+        : undefined)
+      ?? categories.find((c) => c.label === r.categoryLabel && (c.type === type || c.type === 'both'));
     const catKey = catObj?.numericId != null ? `id:${catObj.numericId}` : `label:${r.categoryLabel}`;
 
     if (!catMeta.has(catKey)) {
@@ -107,13 +114,18 @@ function buildCatRows(
     if (!r.subcategoryMissing && r.subcategoryLabel) {
       if (!subcatMeta.has(catKey)) subcatMeta.set(catKey, new Map());
       const sm = subcatMeta.get(catKey)!;
-      const subKey = t.subcategoryNumericId != null ? `id:${t.subcategoryNumericId}` : `label:${r.subcategoryLabel}`;
+      // Same canonicalisation as the category level: collapse a subcategory
+      // referenced by id in some rows and only by label in others.
+      const liveSub = catObj?.subcategories.find(
+        (s) => (t.subcategoryNumericId != null && s.numericId === t.subcategoryNumericId) || s.label === r.subcategoryLabel,
+      );
+      const subKey = liveSub?.numericId != null ? `id:${liveSub.numericId}` : `label:${r.subcategoryLabel}`;
       if (!sm.has(subKey)) {
         sm.set(subKey, {
           key: subKey,
           label: r.subcategoryLabel,
           icon: r.subcategoryIcon || (catObj?.icon ?? ''),
-          numericId: t.subcategoryNumericId ?? null,
+          numericId: liveSub?.numericId ?? t.subcategoryNumericId ?? null,
           amount: 0,
         });
       }
@@ -123,12 +135,14 @@ function buildCatRows(
 
   return Array.from(catMeta.values())
     .map(({ key, label, icon, numericId, amount: catTotal }) => ({
+      groupKey: key,
       label, icon,
       avg: catTotal / monthCount,
       pct: total > 0 ? (catTotal / total) * 100 : 0,
       numericId,
       subcats: Array.from((subcatMeta.get(key) ?? new Map<string, SubEntry>()).values())
-        .map(({ label: sl, icon: si, numericId: subNumericId, amount: sa }) => ({
+        .map(({ key: subGroupKey, label: sl, icon: si, numericId: subNumericId, amount: sa }) => ({
+          groupKey: subGroupKey,
           label: sl,
           icon: si || icon,
           avg: sa / monthCount,
@@ -172,8 +186,8 @@ function CategoryRows({
 }) {
   return (
     <div style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #f3f4f6' }}>
-      {rows.map(({ label, icon, avg, pct, subcats, numericId }, idx) => (
-        <div key={label}>
+      {rows.map(({ groupKey, label, icon, avg, pct, subcats, numericId }, idx) => (
+        <div key={groupKey}>
           <div
             style={{
               display: 'flex', alignItems: 'center',
@@ -212,9 +226,9 @@ function CategoryRows({
             )}
           </div>
 
-          {expandedCat === label && subcats.map(({ label: sl, icon: si, avg: sa, pct: sp, numericId: subNumericId }) => (
+          {expandedCat === label && subcats.map(({ groupKey: subGroupKey, label: sl, icon: si, avg: sa, pct: sp, numericId: subNumericId }) => (
             <div
-              key={sl}
+              key={subGroupKey}
               style={{
                 display: 'flex', alignItems: 'center',
                 borderTop: '1px solid #f3f4f6',
